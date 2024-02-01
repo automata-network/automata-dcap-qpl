@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "automata-dcap-qpl-lib"
+		},
+		{
+			"path": "automata-dcap-qpl-tool"
+		}
+	],
+	"settings": {}
+}
