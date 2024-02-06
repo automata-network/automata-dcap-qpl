@@ -52,7 +52,7 @@ pub fn sgx_ql_get_quote_config(
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
         let p_pck_cert_id: *const SgxQlPckCertId = &pck_cert_id as *const SgxQlPckCertId;
-        let mut sgx_ql_config: SgxQlConfig = SgxQlConfig::new([0_u8; 16], 0, Vec::new());
+        let mut sgx_ql_config: SgxQlConfig = SgxQlConfig::new([0_u8; 16], 0, std::ptr::null_mut(), 0);
         let mut p_sgx_ql_config: *mut SgxQlConfig = &mut sgx_ql_config as *mut SgxQlConfig;
         let pp_sgx_ql_config: *mut *mut SgxQlConfig = &mut p_sgx_ql_config as *mut *mut SgxQlConfig;
         let ret = azure::az_dcap_sgx_ql_get_quote_config(p_pck_cert_id, pp_sgx_ql_config);

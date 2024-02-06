@@ -10,8 +10,17 @@ use automata_dcap_qpl_contracts::{
 
 use ethers::prelude::*;
 use openssl::x509::X509;
-use std::ffi::{c_char, CStr};
+use std::ffi::{c_char, CStr, CString};
+use std::mem::ManuallyDrop;
 use std::sync::Arc;
+
+pub fn into_raw_parts<T>(vec: Vec<T>) -> (*mut T, usize, usize) {
+    let mut vec = ManuallyDrop::new(vec);
+    let length = vec.len();
+    let capacity = vec.capacity();
+    (vec.as_mut_ptr(), length, capacity)
+}
+
 
 // quote3_error_t sgx_ql_get_quote_config(const sgx_ql_pck_cert_id_t *p_pck_cert_id, sgx_ql_config_t **pp_quote_config);
 #[no_mangle]
@@ -153,7 +162,10 @@ pub extern "C" fn sgx_ql_get_quote_config(
     let mut ending = vec![0u8];
     certs.append(&mut ending);
 
-    let quote_config = SgxQlConfig::new(cpu_svn.cpu_svn, pce_svn.isv_svn, certs);
+    certs.truncate(certs.len());
+    let (certs, cert_len, _) = into_raw_parts(certs);
+
+    let quote_config = SgxQlConfig::new(cpu_svn.cpu_svn, pce_svn.isv_svn, certs, cert_len);
     unsafe {
         *pp_quote_config = Box::into_raw(Box::new(quote_config));
     }
@@ -165,8 +177,8 @@ pub extern "C" fn sgx_ql_get_quote_config(
             (*quote_config).cert_data_size as usize,
         )
     };
-    // println!("cert len: {}", unsafe {(*quote_config).cert_data_size as usize});
-    // println!("cert: {:?}", cert_data);
+    println!("cert len: {}", unsafe {(*quote_config).cert_data_size as usize});
+    println!("cert: {:?}", cert_data);
     println!("certdata: {}", std::str::from_utf8(cert_data).unwrap());
 
     return Quote3Error::SgxQlSuccess;
@@ -330,34 +342,16 @@ pub extern "C" fn sgx_ql_get_qve_identity(
         qve.identity_str,
         qve.signature.to_string().trim_start_matches("0x")
     );
-    let mut qve_identity: Vec<c_char> = qve_identity_str
-        .as_bytes()
-        .to_vec()
-        .into_iter()
-        .map(|x| x as c_char)
-        .collect();
-    let mut qve_identity_issuer_chain: Vec<c_char> = Vec::new();
-    qve_identity_issuer_chain.append(
-        &mut issuer_chain
-            .0
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
-    qve_identity_issuer_chain.append(
-        &mut issuer_chain
-            .1
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
+    let qve_identity_c_str = CString::new(qve_identity_str).unwrap();
+    let qve_identity_len = qve_identity_c_str.as_bytes_with_nul().len();
+    let qve_identity_issuer_chain_str = format!("{}{}", issuer_chain.0.to_string(), issuer_chain.1.to_string());
+    let qve_identity_issuer_chain_c_str = CString::new(qve_identity_issuer_chain_str).unwrap();
+    let qve_identity_issuer_chain_len = qve_identity_issuer_chain_c_str.as_bytes_with_nul().len();
     unsafe {
-        *p_qve_identity_size = qve_identity.len() as u32;
-        *p_qve_identity_issuer_chain_size = qve_identity_issuer_chain.len() as u32;
-        *pp_qve_identity = qve_identity.as_mut_ptr();
-        *pp_qve_identity_issuer_chain = qve_identity_issuer_chain.as_mut_ptr();
+        *p_qve_identity_size = qve_identity_len as u32;
+        *p_qve_identity_issuer_chain_size = qve_identity_issuer_chain_len as u32;
+        *pp_qve_identity = qve_identity_c_str.into_raw();
+        *pp_qve_identity_issuer_chain = qve_identity_issuer_chain_c_str.into_raw();
     }
     return Quote3Error::SgxQlSuccess;
 }
@@ -372,8 +366,10 @@ pub extern "C" fn sgx_ql_free_qve_identity(
 ) -> Quote3Error {
     println!("Automata DCAP QPL: sgx_ql_free_qve_identity");
     unsafe {
-        drop(Box::from_raw(p_qve_identity));
-        drop(Box::from_raw(p_qve_identity_issuer_chain));
+        let _ = CStr::from_ptr(p_qve_identity);
+        let _ = CStr::from_ptr(p_qve_identity_issuer_chain);
+        *p_qve_identity = 0;
+        *p_qve_identity_issuer_chain = 0;
     }
     return Quote3Error::SgxQlSuccess;
 }
@@ -416,14 +412,11 @@ pub extern "C" fn sgx_ql_get_root_ca_crl(
         return Quote3Error::SgxQlErrorUnexpected;
     }
 
-    let mut root_ca_crl: Vec<c_char> = root_ca_crl_bytes
-        .to_vec()
-        .into_iter()
-        .map(|x| x as c_char)
-        .collect();
+    let root_ca_crl_c_str = CString::new(root_ca_crl_bytes.to_string()).unwrap();
+    let root_ca_crl_len = root_ca_crl_c_str.as_bytes_with_nul().len();
     unsafe {
-        *p_root_ca_crl_size = root_ca_crl.len() as u16;
-        *pp_root_ca_crl = root_ca_crl.as_mut_ptr();
+        *p_root_ca_crl_size = root_ca_crl_len as u16;
+        *pp_root_ca_crl = root_ca_crl_c_str.into_raw();
     }
     return Quote3Error::SgxQlSuccess;
 }
@@ -434,7 +427,8 @@ pub extern "C" fn sgx_ql_get_root_ca_crl(
 pub extern "C" fn sgx_ql_free_root_ca_crl(p_root_ca_crl: *mut c_char) -> Quote3Error {
     println!("Automata DCAP QPL: sgx_ql_free_root_ca_crl");
     unsafe {
-        drop(Box::from_raw(p_root_ca_crl));
+        let _ = CStr::from_ptr(p_root_ca_crl);
+        *p_root_ca_crl = 0;
     }
     return Quote3Error::SgxQlSuccess;
 }
@@ -498,11 +492,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
             return Quote3Error::SgxQlErrorUnexpected;
         }
     };
-    let pck_crl: Vec<c_char> = pck_crl_bytes
-        .to_vec()
-        .into_iter()
-        .map(|x| x as c_char)
-        .collect();
+    let pck_crl_c_str = CString::new(pck_crl_bytes.to_string()).unwrap();
     let pck_dao_address = PCK_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
     let pck_dao = PckDao::new(pck_dao_address, client.clone());
     let pck_cert_chains = match rt.block_on(pck_dao.get_pck_cert_chain(ca_id).call()) {
@@ -511,23 +501,8 @@ fn sgx_ql_fetch_quote_verification_collateral(
             return Quote3Error::SgxQlErrorUnexpected;
         }
     };
-    let mut pck_crl_issuer_chain: Vec<c_char> = Vec::new();
-    pck_crl_issuer_chain.append(
-        &mut pck_cert_chains
-            .0
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
-    pck_crl_issuer_chain.append(
-        &mut pck_cert_chains
-            .1
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
+    let pck_crl_issuer_chain_str = format!("{}{}", pck_cert_chains.0.to_string(), pck_cert_chains.1.to_string());
+    let pck_crl_issuer_chain_c_str = CString::new(pck_crl_issuer_chain_str).unwrap();
 
     // Get Root CA CRL
     let ca_id = CAID::Root as u8;
@@ -537,11 +512,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
             return Quote3Error::SgxQlErrorUnexpected;
         }
     };
-    let root_ca_crl: Vec<c_char> = root_ca_crl_bytes
-        .to_vec()
-        .into_iter()
-        .map(|x| x as c_char)
-        .collect();
+    let root_ca_crl_c_str = CString::new(root_ca_crl_bytes.to_string()).unwrap();
 
     // Get Tcb Info & Issuer Chain
     // Input: sgx_prod_type, fmspc_string
@@ -572,36 +543,15 @@ fn sgx_ql_fetch_quote_verification_collateral(
         tcb_info.tcb_info_str,
         tcb_info.signature.to_string().trim_start_matches("0x")
     );
-    let tcb_info: Vec<c_char> = tcb_info_str
-        .as_bytes()
-        .to_vec()
-        .into_iter()
-        .map(|x| x as c_char)
-        .collect();
-
+    let tcb_info_c_str = CString::new(tcb_info_str).unwrap();
     let tcb_info_issuer_chains = match rt.block_on(fmspc_tcb_dao.get_tcb_issuer_chain().call()) {
         Ok(v) => v,
         Err(_) => {
             return Quote3Error::SgxQlErrorTcbinfoNotFound;
         }
     };
-    let mut tcb_info_issuer_chain: Vec<c_char> = Vec::new();
-    tcb_info_issuer_chain.append(
-        &mut tcb_info_issuer_chains
-            .0
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
-    tcb_info_issuer_chain.append(
-        &mut tcb_info_issuer_chains
-            .1
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
+    let tcb_info_issuer_chain_str = format!("{}{}", tcb_info_issuer_chains.0.to_string(), tcb_info_issuer_chains.1.to_string());
+    let tcb_info_issuer_chain_c_str = CString::new(tcb_info_issuer_chain_str).unwrap();
 
     // Get QE Identity & Issuer Chain
     // Input: sgx_prod_type, api_version
@@ -642,29 +592,9 @@ fn sgx_ql_fetch_quote_verification_collateral(
         qe.identity_str,
         qe.signature.to_string().trim_start_matches("0x")
     );
-    let qe_identity: Vec<c_char> = qe_identity_str
-        .as_bytes()
-        .to_vec()
-        .into_iter()
-        .map(|x| x as c_char)
-        .collect();
-    let mut qe_identity_issuer_chain: Vec<c_char> = Vec::new();
-    qe_identity_issuer_chain.append(
-        &mut issuer_chain
-            .0
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
-    qe_identity_issuer_chain.append(
-        &mut issuer_chain
-            .1
-            .to_vec()
-            .into_iter()
-            .map(|x| x as c_char)
-            .collect(),
-    );
+    let qe_identity_c_str = CString::new(qe_identity_str).unwrap();
+    let qe_identity_issuer_chain_str = format!("{}{}", issuer_chain.0.to_string(), issuer_chain.1.to_string());
+    let qe_identity_issuer_chain_c_str = CString::new(qe_identity_issuer_chain_str).unwrap();
 
     let (version, tee_type) = if sgx_prod_type == SgxProdType::SgxProdTypeTdx {
         let v = SgxQlQveCollateralVersions {
@@ -678,13 +608,13 @@ fn sgx_ql_fetch_quote_verification_collateral(
     let quote_collateral = SgxQlQveCollateral::new(
         version,
         tee_type,
-        pck_crl_issuer_chain,
-        root_ca_crl,
-        pck_crl,
-        tcb_info_issuer_chain,
-        tcb_info,
-        qe_identity_issuer_chain,
-        qe_identity,
+        pck_crl_issuer_chain_c_str,
+        root_ca_crl_c_str,
+        pck_crl_c_str,
+        tcb_info_issuer_chain_c_str,
+        tcb_info_c_str,
+        qe_identity_issuer_chain_c_str,
+        qe_identity_c_str,
     );
     unsafe {
         *pp_quote_collateral = Box::into_raw(Box::new(quote_collateral));
