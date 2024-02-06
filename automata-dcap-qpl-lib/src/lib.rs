@@ -95,9 +95,10 @@ pub extern "C" fn sgx_ql_get_quote_config(
     }
     let leaf_cert_str = leaf_cert.to_string();
     let leaf_cert_slices = hex::decode(&leaf_cert_str.trim_start_matches("0x")).unwrap();
-    let mut cert = match X509::from_der(leaf_cert_slices.as_slice()) {
+    let (mut cert, issuer) = match X509::from_der(leaf_cert_slices.as_slice()) {
         Ok(c) => {
-            c.to_pem().unwrap()
+            let issuer = format!("{:?}", c.issuer_name());
+            (c.to_pem().unwrap(), issuer)
         },
         Err(err) => {
             println!("meet error when decoding the cert result from chain: {:?}", err);
@@ -107,9 +108,13 @@ pub extern "C" fn sgx_ql_get_quote_config(
     let mut certs = Vec::new();
     certs.append(&mut cert);
 
-    // TODO how to determine the CA here? platform or processor
+    let ca_id = if issuer.contains("Platform") {
+        CAID::Platform as u8
+    } else {
+        CAID::Processor as u8
+    };
     let (intermediate_cert, _) = match rt.block_on(
-        pcs_dao.get_certificate_by_id(CAID::Platform as u8).call()
+        pcs_dao.get_certificate_by_id(ca_id).call()
     ) {
         Ok(v) => v,
         Err(err) => {
