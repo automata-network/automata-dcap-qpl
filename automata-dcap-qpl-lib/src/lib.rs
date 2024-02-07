@@ -190,7 +190,7 @@ pub extern "C" fn sgx_ql_get_quote_config(
     assert!(tcbm.len() == 18);
     let tcbm_cpu_svn_slices = &tcbm[0..16];
     let tcbm_cpu_svn:[u8; 16] = tcbm_cpu_svn_slices.try_into().unwrap();
-    let tcbm_pce_svn = tcbm[18] as u16 * 16 + tcbm[17] as u16;
+    let tcbm_pce_svn = tcbm[17] as u16 * 16 + tcbm[16] as u16;
     println!("tcbm.cpu_svn: {:?}", hex::encode(tcbm_cpu_svn));
     println!("tcbm.pce_svn: {:?}", hex::encode(tcbm_pce_svn.to_le_bytes()));
     let quote_config = SgxQlConfig::new(tcbm_cpu_svn, tcbm_pce_svn, certs, cert_len);
