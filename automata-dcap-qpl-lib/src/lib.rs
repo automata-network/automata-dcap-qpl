@@ -74,13 +74,29 @@ pub extern "C" fn sgx_ql_get_quote_config(
     let pcs_dao = PcsDao::new(pcs_dao_address, client.clone());
     let pck_dao_address = PCK_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
     let pck_dao = PckDao::new(pck_dao_address, client.clone());
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
+    let tcbm = match rt.block_on(
+        pck_dao
+            .get_platform_tcb_by_id_and_svns(qe_id_str.clone(), pce_id_str.clone(), cpu_svn_str.clone(), pce_svn_str.clone())
+            .call()
+    ) {
+        Ok(v) => v,
+        Err(err) => {
+            println!("sgx_ql_get_quote_config meet error: {:?}", err);
+            return Quote3Error::SgxQlErrorUnexpected;
+        }
+    };
+    if tcbm.len() == 0 {
+        println!("cannot find tcbm on chain, plz use tool to upload first");
+        return Quote3Error::SgxQlErrorUnexpected;
+    }
     let leaf_cert: Bytes = match rt.block_on(
         pck_dao
-            .get_cert(qe_id_str, pce_id_str, cpu_svn_str, pce_svn_str)
+            .get_cert(qe_id_str, cpu_svn_str, pce_svn_str, pce_id_str)
             .call(),
     ) {
         Ok(v) => v,
@@ -170,7 +186,14 @@ pub extern "C" fn sgx_ql_get_quote_config(
     certs.truncate(certs.len());
     let (certs, cert_len, _) = into_raw_parts(certs);
 
-    let quote_config = SgxQlConfig::new(cpu_svn.cpu_svn, pce_svn.isv_svn, certs, cert_len);
+    let tcbm = hex::decode(tcbm.trim_start_matches("0x")).unwrap();
+    assert!(tcbm.len() == 18);
+    let tcbm_cpu_svn_slices = &tcbm[0..16];
+    let tcbm_cpu_svn:[u8; 16] = tcbm_cpu_svn_slices.try_into().unwrap();
+    let tcbm_pce_svn = tcbm[18] as u16 * 16 + tcbm[17] as u16;
+    println!("tcbm.cpu_svn: {:?}", hex::encode(tcbm_cpu_svn));
+    println!("tcbm.pce_svn: {:?}", hex::encode(tcbm_pce_svn.to_le_bytes()));
+    let quote_config = SgxQlConfig::new(tcbm_cpu_svn, tcbm_pce_svn, certs, cert_len);
     unsafe {
         *pp_quote_config = Box::into_raw(Box::new(quote_config));
     }

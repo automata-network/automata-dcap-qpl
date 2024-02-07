@@ -21,6 +21,7 @@ pub fn upsert_pck_cert(
     pce_id: String,
     cpu_svn: String,
     pce_svn: String,
+    tcbm: String,
     cert_chains_str: &str,
 ) {
     let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
@@ -123,10 +124,9 @@ pub fn upsert_pck_cert(
         pck_dao
             .upsert_pck_cert(
                 ca as u8,
-                qe_id,
-                pce_id,
-                cpu_svn,
-                pce_svn,
+                qe_id.clone(),
+                pce_id.clone(),
+                tcbm.clone(),
                 Bytes::from_str(&certs[0]).unwrap(),
             )
             .send(),
@@ -144,6 +144,26 @@ pub fn upsert_pck_cert(
         }
         Err(err) => {
             println!("txn[upsert_pck_cert] meet error: {:?}", err);
+        }
+    };
+    match rt.block_on(
+        pck_dao
+            .upsert_platform_tcbs(qe_id, pce_id, cpu_svn, pce_svn, tcbm)
+            .send()
+    ) {
+        Ok(pending_tx) => {
+            println!("txn[upsert_platform_tcbs] hash: {:?}", pending_tx.tx_hash());
+            match rt.block_on(pending_tx) {
+                Ok(receipt) => {
+                    println!("txn[upsert_platform_tcbs] receipt: {:?}", receipt);
+                }
+                Err(err) => {
+                    println!("txn[upsert_platform_tcbs] receipt meet error: {:?}", err);
+                }
+            }
+        }
+        Err(err) => {
+            println!("txn[upsert_platform_tcbs] meet error: {:?}", err);
         }
     };
 }

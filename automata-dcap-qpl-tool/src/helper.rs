@@ -60,6 +60,15 @@ pub fn sgx_ql_get_quote_config(
         let quote_config = unsafe { *pp_sgx_ql_config };
         unsafe { quote_config.as_ref().unwrap().print() };
 
+        let tcbm = unsafe {
+            let mut tcbm_vec = Vec::new();
+            let mut tcbm_cpu_svn = quote_config.as_ref().unwrap().cert_cpu_svn.cpu_svn.clone().to_vec();
+            tcbm_vec.append(&mut tcbm_cpu_svn);
+            let tcbm_pce_svn = quote_config.as_ref().unwrap().cert_pce_isv_svn.isv_svn;
+            let mut tcbm_pce_svn = tcbm_pce_svn.to_le_bytes().to_vec();
+            tcbm_vec.append(&mut tcbm_pce_svn);
+            hex::encode(tcbm_vec)
+        };
         let cert_data = unsafe {
             std::slice::from_raw_parts(
                 quote_config.as_ref().unwrap().cert_data,
@@ -75,6 +84,7 @@ pub fn sgx_ql_get_quote_config(
             pce_id_str,
             cpu_svn_str,
             pce_svn_str,
+            tcbm,
             cert_data,
         );
 

@@ -49,21 +49,21 @@ pub mod pck_dao {
                                     ),
                                 },
                                 ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("platformCpuSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("platformPceSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
                                     name: ::std::borrow::ToOwned::to_owned("pceid"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("string"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("cpusvn"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("string"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("pcesvn"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::String,
                                     internal_type: ::core::option::Option::Some(
                                         ::std::borrow::ToOwned::to_owned("string"),
@@ -76,6 +76,56 @@ pub mod pck_dao {
                                     kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
                                     internal_type: ::core::option::Option::Some(
                                         ::std::borrow::ToOwned::to_owned("bytes"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("getCerts"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("getCerts"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("qeid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("pceid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("tcbms"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                        ::std::boxed::Box::new(
+                                            ::ethers::core::abi::ethabi::ParamType::String,
+                                        ),
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string[]"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("pckCerts"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                                        ::std::boxed::Box::new(
+                                            ::ethers::core::abi::ethabi::ParamType::Bytes,
+                                        ),
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("bytes[]"),
                                     ),
                                 },
                             ],
@@ -116,6 +166,57 @@ pub mod pck_dao {
                             ],
                             constant: ::core::option::Option::None,
                             state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("getPlatformTcbByIdAndSvns"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "getPlatformTcbByIdAndSvns",
+                            ),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("qeid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("pceid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("platformCpuSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("platformPceSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("tcbm"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                         },
                     ],
                 ),
@@ -176,6 +277,60 @@ pub mod pck_dao {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("tcbmAttestations"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("tcbmAttestations"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
+                                        32usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("bytes32"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
+                                        32usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("bytes32"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("tcbmSchemaId"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("tcbmSchemaId"),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("TCBM_SCHEMA_ID"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
+                                        32usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("bytes32"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("upsertPckCert"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -203,14 +358,7 @@ pub mod pck_dao {
                                     ),
                                 },
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("cpusvn"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("string"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("pcesvn"),
+                                    name: ::std::borrow::ToOwned::to_owned("tcbm"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::String,
                                     internal_type: ::core::option::Option::Some(
                                         ::std::borrow::ToOwned::to_owned("string"),
@@ -221,6 +369,64 @@ pub mod pck_dao {
                                     kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
                                     internal_type: ::core::option::Option::Some(
                                         ::std::borrow::ToOwned::to_owned("bytes"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("attestationId"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
+                                        32usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("bytes32"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("upsertPlatformTcbs"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("upsertPlatformTcbs"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("qeid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("pceid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("platformCpuSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("platformPceSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("tcbm"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("string"),
                                     ),
                                 },
                             ],
@@ -259,12 +465,64 @@ pub mod pck_dao {
                                     indexed: false,
                                 },
                                 ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("cpusvn"),
+                                    name: ::std::borrow::ToOwned::to_owned("platformCpuSvn"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::String,
                                     indexed: false,
                                 },
                                 ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("pcesvn"),
+                                    name: ::std::borrow::ToOwned::to_owned("platformPceSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                            ],
+                            anonymous: false,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("PCKsMissing"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("PCKsMissing"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("qeid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("pceid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                            ],
+                            anonymous: false,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("TCBmMissing"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Event {
+                            name: ::std::borrow::ToOwned::to_owned("TCBmMissing"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("qeid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("pceid"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("platformCpuSvn"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                    indexed: false,
+                                },
+                                ::ethers::core::abi::ethabi::EventParam {
+                                    name: ::std::borrow::ToOwned::to_owned("platformPceSvn"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::String,
                                     indexed: false,
                                 },
@@ -289,6 +547,32 @@ pub mod pck_dao {
                                     ),
                                 },
                             ],
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("Not_An_Admin"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::AbiError {
+                            name: ::std::borrow::ToOwned::to_owned("Not_An_Admin"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("caller"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("address"),
+                                    ),
+                                },
+                            ],
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("Pck_Not_Found"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::AbiError {
+                            name: ::std::borrow::ToOwned::to_owned("Pck_Not_Found"),
+                            inputs: ::std::vec![],
                         },
                     ],
                 ),
@@ -353,15 +637,34 @@ pub mod pck_dao {
         pub fn get_cert(
             &self,
             qeid: ::std::string::String,
+            platform_cpu_svn: ::std::string::String,
+            platform_pce_svn: ::std::string::String,
             pceid: ::std::string::String,
-            cpusvn: ::std::string::String,
-            pcesvn: ::std::string::String,
         ) -> ::ethers::contract::builders::ContractCall<
             M,
             ::ethers::core::types::Bytes,
         > {
             self.0
-                .method_hash([60, 125, 113, 20], (qeid, pceid, cpusvn, pcesvn))
+                .method_hash(
+                    [60, 125, 113, 20],
+                    (qeid, platform_cpu_svn, platform_pce_svn, pceid),
+                )
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `getCerts` (0x28685839) function
+        pub fn get_certs(
+            &self,
+            qeid: ::std::string::String,
+            pceid: ::std::string::String,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (
+                ::std::vec::Vec<::std::string::String>,
+                ::std::vec::Vec<::ethers::core::types::Bytes>,
+            ),
+        > {
+            self.0
+                .method_hash([40, 104, 88, 57], (qeid, pceid))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `getPckCertChain` (0x48ac8059) function
@@ -374,6 +677,21 @@ pub mod pck_dao {
         > {
             self.0
                 .method_hash([72, 172, 128, 89], ca)
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `getPlatformTcbByIdAndSvns` (0x7eb619c7) function
+        pub fn get_platform_tcb_by_id_and_svns(
+            &self,
+            qeid: ::std::string::String,
+            pceid: ::std::string::String,
+            platform_cpu_svn: ::std::string::String,
+            platform_pce_svn: ::std::string::String,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::std::string::String> {
+            self.0
+                .method_hash(
+                    [126, 182, 25, 199],
+                    (qeid, pceid, platform_cpu_svn, platform_pce_svn),
+                )
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `pckCertAttestations` (0x68ef0c53) function
@@ -393,18 +711,50 @@ pub mod pck_dao {
                 .method_hash([54, 195, 59, 182], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `upsertPckCert` (0xb2611456) function
+        ///Calls the contract's `tcbmAttestations` (0xe4a4171a) function
+        pub fn tcbm_attestations(
+            &self,
+            p0: [u8; 32],
+        ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
+            self.0
+                .method_hash([228, 164, 23, 26], p0)
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `tcbmSchemaId` (0xcbd3805e) function
+        pub fn tcbm_schema_id(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
+            self.0
+                .method_hash([203, 211, 128, 94], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `upsertPckCert` (0x5be0fa4b) function
         pub fn upsert_pck_cert(
             &self,
             ca: u8,
             qeid: ::std::string::String,
             pceid: ::std::string::String,
-            cpusvn: ::std::string::String,
-            pcesvn: ::std::string::String,
+            tcbm: ::std::string::String,
             cert: ::ethers::core::types::Bytes,
         ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
-                .method_hash([178, 97, 20, 86], (ca, qeid, pceid, cpusvn, pcesvn, cert))
+                .method_hash([91, 224, 250, 75], (ca, qeid, pceid, tcbm, cert))
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `upsertPlatformTcbs` (0xc925d17a) function
+        pub fn upsert_platform_tcbs(
+            &self,
+            qeid: ::std::string::String,
+            pceid: ::std::string::String,
+            platform_cpu_svn: ::std::string::String,
+            platform_pce_svn: ::std::string::String,
+            tcbm: ::std::string::String,
+        ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
+            self.0
+                .method_hash(
+                    [201, 37, 209, 122],
+                    (qeid, pceid, platform_cpu_svn, platform_pce_svn, tcbm),
+                )
                 .expect("method not found (this should never happen)")
         }
         ///Gets the contract's `PCKMissing` event
@@ -417,14 +767,30 @@ pub mod pck_dao {
         > {
             self.0.event()
         }
-        /// Returns an `Event` builder for all the events of this contract.
-        pub fn events(
+        ///Gets the contract's `PCKsMissing` event
+        pub fn pc_ks_missing_filter(
             &self,
         ) -> ::ethers::contract::builders::Event<
             ::std::sync::Arc<M>,
             M,
-            PckmissingFilter,
+            PcksMissingFilter,
         > {
+            self.0.event()
+        }
+        ///Gets the contract's `TCBmMissing` event
+        pub fn tc_bm_missing_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<
+            ::std::sync::Arc<M>,
+            M,
+            TcbmMissingFilter,
+        > {
+            self.0.event()
+        }
+        /// Returns an `Event` builder for all the events of this contract.
+        pub fn events(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, PckDaoEvents> {
             self.0.event_with_filter(::core::default::Default::default())
         }
     }
@@ -449,6 +815,136 @@ pub mod pck_dao {
     pub struct Invalid_PCK_CA {
         pub ca: u8,
     }
+    ///Custom Error type `Not_An_Admin` with signature `Not_An_Admin(address)` and selector `0x0d7277d9`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[etherror(name = "Not_An_Admin", abi = "Not_An_Admin(address)")]
+    pub struct Not_An_Admin {
+        pub caller: ::ethers::core::types::Address,
+    }
+    ///Custom Error type `Pck_Not_Found` with signature `Pck_Not_Found()` and selector `0x82fba295`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[etherror(name = "Pck_Not_Found", abi = "Pck_Not_Found()")]
+    pub struct Pck_Not_Found;
+    ///Container type for all of the contract's custom errors
+    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
+    pub enum PckDaoErrors {
+        Invalid_PCK_CA(Invalid_PCK_CA),
+        Not_An_Admin(Not_An_Admin),
+        Pck_Not_Found(Pck_Not_Found),
+        /// The standard solidity revert string, with selector
+        /// Error(string) -- 0x08c379a0
+        RevertString(::std::string::String),
+    }
+    impl ::ethers::core::abi::AbiDecode for PckDaoErrors {
+        fn decode(
+            data: impl AsRef<[u8]>,
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
+            let data = data.as_ref();
+            if let Ok(decoded) = <::std::string::String as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::RevertString(decoded));
+            }
+            if let Ok(decoded) = <Invalid_PCK_CA as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::Invalid_PCK_CA(decoded));
+            }
+            if let Ok(decoded) = <Not_An_Admin as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::Not_An_Admin(decoded));
+            }
+            if let Ok(decoded) = <Pck_Not_Found as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::Pck_Not_Found(decoded));
+            }
+            Err(::ethers::core::abi::Error::InvalidData.into())
+        }
+    }
+    impl ::ethers::core::abi::AbiEncode for PckDaoErrors {
+        fn encode(self) -> ::std::vec::Vec<u8> {
+            match self {
+                Self::Invalid_PCK_CA(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::Not_An_Admin(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::Pck_Not_Found(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
+            }
+        }
+    }
+    impl ::ethers::contract::ContractRevert for PckDaoErrors {
+        fn valid_selector(selector: [u8; 4]) -> bool {
+            match selector {
+                [0x08, 0xc3, 0x79, 0xa0] => true,
+                _ if selector
+                    == <Invalid_PCK_CA as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <Not_An_Admin as ::ethers::contract::EthError>::selector() => true,
+                _ if selector
+                    == <Pck_Not_Found as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ => false,
+            }
+        }
+    }
+    impl ::core::fmt::Display for PckDaoErrors {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            match self {
+                Self::Invalid_PCK_CA(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Not_An_Admin(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Pck_Not_Found(element) => ::core::fmt::Display::fmt(element, f),
+                Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
+            }
+        }
+    }
+    impl ::core::convert::From<::std::string::String> for PckDaoErrors {
+        fn from(value: String) -> Self {
+            Self::RevertString(value)
+        }
+    }
+    impl ::core::convert::From<Invalid_PCK_CA> for PckDaoErrors {
+        fn from(value: Invalid_PCK_CA) -> Self {
+            Self::Invalid_PCK_CA(value)
+        }
+    }
+    impl ::core::convert::From<Not_An_Admin> for PckDaoErrors {
+        fn from(value: Not_An_Admin) -> Self {
+            Self::Not_An_Admin(value)
+        }
+    }
+    impl ::core::convert::From<Pck_Not_Found> for PckDaoErrors {
+        fn from(value: Pck_Not_Found) -> Self {
+            Self::Pck_Not_Found(value)
+        }
+    }
     #[derive(
         Clone,
         ::ethers::contract::EthEvent,
@@ -463,8 +959,87 @@ pub mod pck_dao {
     pub struct PckmissingFilter {
         pub qeid: ::std::string::String,
         pub pceid: ::std::string::String,
-        pub cpusvn: ::std::string::String,
-        pub pcesvn: ::std::string::String,
+        pub platform_cpu_svn: ::std::string::String,
+        pub platform_pce_svn: ::std::string::String,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethevent(name = "PCKsMissing", abi = "PCKsMissing(string,string)")]
+    pub struct PcksMissingFilter {
+        pub qeid: ::std::string::String,
+        pub pceid: ::std::string::String,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethevent(name = "TCBmMissing", abi = "TCBmMissing(string,string,string,string)")]
+    pub struct TcbmMissingFilter {
+        pub qeid: ::std::string::String,
+        pub pceid: ::std::string::String,
+        pub platform_cpu_svn: ::std::string::String,
+        pub platform_pce_svn: ::std::string::String,
+    }
+    ///Container type for all of the contract's events
+    #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
+    pub enum PckDaoEvents {
+        PckmissingFilter(PckmissingFilter),
+        PcksMissingFilter(PcksMissingFilter),
+        TcbmMissingFilter(TcbmMissingFilter),
+    }
+    impl ::ethers::contract::EthLogDecode for PckDaoEvents {
+        fn decode_log(
+            log: &::ethers::core::abi::RawLog,
+        ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
+            if let Ok(decoded) = PckmissingFilter::decode_log(log) {
+                return Ok(PckDaoEvents::PckmissingFilter(decoded));
+            }
+            if let Ok(decoded) = PcksMissingFilter::decode_log(log) {
+                return Ok(PckDaoEvents::PcksMissingFilter(decoded));
+            }
+            if let Ok(decoded) = TcbmMissingFilter::decode_log(log) {
+                return Ok(PckDaoEvents::TcbmMissingFilter(decoded));
+            }
+            Err(::ethers::core::abi::Error::InvalidData)
+        }
+    }
+    impl ::core::fmt::Display for PckDaoEvents {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            match self {
+                Self::PckmissingFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::PcksMissingFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TcbmMissingFilter(element) => ::core::fmt::Display::fmt(element, f),
+            }
+        }
+    }
+    impl ::core::convert::From<PckmissingFilter> for PckDaoEvents {
+        fn from(value: PckmissingFilter) -> Self {
+            Self::PckmissingFilter(value)
+        }
+    }
+    impl ::core::convert::From<PcksMissingFilter> for PckDaoEvents {
+        fn from(value: PcksMissingFilter) -> Self {
+            Self::PcksMissingFilter(value)
+        }
+    }
+    impl ::core::convert::From<TcbmMissingFilter> for PckDaoEvents {
+        fn from(value: TcbmMissingFilter) -> Self {
+            Self::TcbmMissingFilter(value)
+        }
     }
     ///Container type for all input parameters for the `Pcs` function with signature `Pcs()` and selector `0xd88d1df6`
     #[derive(
@@ -493,9 +1068,25 @@ pub mod pck_dao {
     #[ethcall(name = "getCert", abi = "getCert(string,string,string,string)")]
     pub struct GetCertCall {
         pub qeid: ::std::string::String,
+        pub platform_cpu_svn: ::std::string::String,
+        pub platform_pce_svn: ::std::string::String,
         pub pceid: ::std::string::String,
-        pub cpusvn: ::std::string::String,
-        pub pcesvn: ::std::string::String,
+    }
+    ///Container type for all input parameters for the `getCerts` function with signature `getCerts(string,string)` and selector `0x28685839`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "getCerts", abi = "getCerts(string,string)")]
+    pub struct GetCertsCall {
+        pub qeid: ::std::string::String,
+        pub pceid: ::std::string::String,
     }
     ///Container type for all input parameters for the `getPckCertChain` function with signature `getPckCertChain(uint8)` and selector `0x48ac8059`
     #[derive(
@@ -511,6 +1102,27 @@ pub mod pck_dao {
     #[ethcall(name = "getPckCertChain", abi = "getPckCertChain(uint8)")]
     pub struct GetPckCertChainCall {
         pub ca: u8,
+    }
+    ///Container type for all input parameters for the `getPlatformTcbByIdAndSvns` function with signature `getPlatformTcbByIdAndSvns(string,string,string,string)` and selector `0x7eb619c7`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(
+        name = "getPlatformTcbByIdAndSvns",
+        abi = "getPlatformTcbByIdAndSvns(string,string,string,string)"
+    )]
+    pub struct GetPlatformTcbByIdAndSvnsCall {
+        pub qeid: ::std::string::String,
+        pub pceid: ::std::string::String,
+        pub platform_cpu_svn: ::std::string::String,
+        pub platform_pce_svn: ::std::string::String,
     }
     ///Container type for all input parameters for the `pckCertAttestations` function with signature `pckCertAttestations(bytes32)` and selector `0x68ef0c53`
     #[derive(
@@ -538,7 +1150,33 @@ pub mod pck_dao {
     )]
     #[ethcall(name = "pckSchemaID", abi = "pckSchemaID()")]
     pub struct PckSchemaIDCall;
-    ///Container type for all input parameters for the `upsertPckCert` function with signature `upsertPckCert(uint8,string,string,string,string,bytes)` and selector `0xb2611456`
+    ///Container type for all input parameters for the `tcbmAttestations` function with signature `tcbmAttestations(bytes32)` and selector `0xe4a4171a`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "tcbmAttestations", abi = "tcbmAttestations(bytes32)")]
+    pub struct TcbmAttestationsCall(pub [u8; 32]);
+    ///Container type for all input parameters for the `tcbmSchemaId` function with signature `tcbmSchemaId()` and selector `0xcbd3805e`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "tcbmSchemaId", abi = "tcbmSchemaId()")]
+    pub struct TcbmSchemaIdCall;
+    ///Container type for all input parameters for the `upsertPckCert` function with signature `upsertPckCert(uint8,string,string,string,bytes)` and selector `0x5be0fa4b`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -551,25 +1189,51 @@ pub mod pck_dao {
     )]
     #[ethcall(
         name = "upsertPckCert",
-        abi = "upsertPckCert(uint8,string,string,string,string,bytes)"
+        abi = "upsertPckCert(uint8,string,string,string,bytes)"
     )]
     pub struct UpsertPckCertCall {
         pub ca: u8,
         pub qeid: ::std::string::String,
         pub pceid: ::std::string::String,
-        pub cpusvn: ::std::string::String,
-        pub pcesvn: ::std::string::String,
+        pub tcbm: ::std::string::String,
         pub cert: ::ethers::core::types::Bytes,
+    }
+    ///Container type for all input parameters for the `upsertPlatformTcbs` function with signature `upsertPlatformTcbs(string,string,string,string,string)` and selector `0xc925d17a`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(
+        name = "upsertPlatformTcbs",
+        abi = "upsertPlatformTcbs(string,string,string,string,string)"
+    )]
+    pub struct UpsertPlatformTcbsCall {
+        pub qeid: ::std::string::String,
+        pub pceid: ::std::string::String,
+        pub platform_cpu_svn: ::std::string::String,
+        pub platform_pce_svn: ::std::string::String,
+        pub tcbm: ::std::string::String,
     }
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, Debug, PartialEq, Eq, Hash)]
     pub enum PckDaoCalls {
         Pcs(PcsCall),
         GetCert(GetCertCall),
+        GetCerts(GetCertsCall),
         GetPckCertChain(GetPckCertChainCall),
+        GetPlatformTcbByIdAndSvns(GetPlatformTcbByIdAndSvnsCall),
         PckCertAttestations(PckCertAttestationsCall),
         PckSchemaID(PckSchemaIDCall),
+        TcbmAttestations(TcbmAttestationsCall),
+        TcbmSchemaId(TcbmSchemaIdCall),
         UpsertPckCert(UpsertPckCertCall),
+        UpsertPlatformTcbs(UpsertPlatformTcbsCall),
     }
     impl ::ethers::core::abi::AbiDecode for PckDaoCalls {
         fn decode(
@@ -586,10 +1250,20 @@ pub mod pck_dao {
             ) {
                 return Ok(Self::GetCert(decoded));
             }
+            if let Ok(decoded) = <GetCertsCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::GetCerts(decoded));
+            }
             if let Ok(decoded) = <GetPckCertChainCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
                 return Ok(Self::GetPckCertChain(decoded));
+            }
+            if let Ok(decoded) = <GetPlatformTcbByIdAndSvnsCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::GetPlatformTcbByIdAndSvns(decoded));
             }
             if let Ok(decoded) = <PckCertAttestationsCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -601,10 +1275,25 @@ pub mod pck_dao {
             ) {
                 return Ok(Self::PckSchemaID(decoded));
             }
+            if let Ok(decoded) = <TcbmAttestationsCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::TcbmAttestations(decoded));
+            }
+            if let Ok(decoded) = <TcbmSchemaIdCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::TcbmSchemaId(decoded));
+            }
             if let Ok(decoded) = <UpsertPckCertCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
                 return Ok(Self::UpsertPckCert(decoded));
+            }
+            if let Ok(decoded) = <UpsertPlatformTcbsCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::UpsertPlatformTcbs(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
@@ -614,7 +1303,13 @@ pub mod pck_dao {
             match self {
                 Self::Pcs(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetCert(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GetCerts(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::GetPckCertChain(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::GetPlatformTcbByIdAndSvns(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::PckCertAttestations(element) => {
@@ -623,7 +1318,16 @@ pub mod pck_dao {
                 Self::PckSchemaID(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::TcbmAttestations(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::TcbmSchemaId(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::UpsertPckCert(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::UpsertPlatformTcbs(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
             }
@@ -634,12 +1338,21 @@ pub mod pck_dao {
             match self {
                 Self::Pcs(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetCert(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GetCerts(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetPckCertChain(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GetPlatformTcbByIdAndSvns(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::PckCertAttestations(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::PckSchemaID(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TcbmAttestations(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TcbmSchemaId(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpsertPckCert(element) => ::core::fmt::Display::fmt(element, f),
+                Self::UpsertPlatformTcbs(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
             }
         }
     }
@@ -653,9 +1366,19 @@ pub mod pck_dao {
             Self::GetCert(value)
         }
     }
+    impl ::core::convert::From<GetCertsCall> for PckDaoCalls {
+        fn from(value: GetCertsCall) -> Self {
+            Self::GetCerts(value)
+        }
+    }
     impl ::core::convert::From<GetPckCertChainCall> for PckDaoCalls {
         fn from(value: GetPckCertChainCall) -> Self {
             Self::GetPckCertChain(value)
+        }
+    }
+    impl ::core::convert::From<GetPlatformTcbByIdAndSvnsCall> for PckDaoCalls {
+        fn from(value: GetPlatformTcbByIdAndSvnsCall) -> Self {
+            Self::GetPlatformTcbByIdAndSvns(value)
         }
     }
     impl ::core::convert::From<PckCertAttestationsCall> for PckDaoCalls {
@@ -668,9 +1391,24 @@ pub mod pck_dao {
             Self::PckSchemaID(value)
         }
     }
+    impl ::core::convert::From<TcbmAttestationsCall> for PckDaoCalls {
+        fn from(value: TcbmAttestationsCall) -> Self {
+            Self::TcbmAttestations(value)
+        }
+    }
+    impl ::core::convert::From<TcbmSchemaIdCall> for PckDaoCalls {
+        fn from(value: TcbmSchemaIdCall) -> Self {
+            Self::TcbmSchemaId(value)
+        }
+    }
     impl ::core::convert::From<UpsertPckCertCall> for PckDaoCalls {
         fn from(value: UpsertPckCertCall) -> Self {
             Self::UpsertPckCert(value)
+        }
+    }
+    impl ::core::convert::From<UpsertPlatformTcbsCall> for PckDaoCalls {
+        fn from(value: UpsertPlatformTcbsCall) -> Self {
+            Self::UpsertPlatformTcbs(value)
         }
     }
     ///Container type for all return fields from the `Pcs` function with signature `Pcs()` and selector `0xd88d1df6`
@@ -699,6 +1437,21 @@ pub mod pck_dao {
     pub struct GetCertReturn {
         pub pck_cert: ::ethers::core::types::Bytes,
     }
+    ///Container type for all return fields from the `getCerts` function with signature `getCerts(string,string)` and selector `0x28685839`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct GetCertsReturn {
+        pub tcbms: ::std::vec::Vec<::std::string::String>,
+        pub pck_certs: ::std::vec::Vec<::ethers::core::types::Bytes>,
+    }
     ///Container type for all return fields from the `getPckCertChain` function with signature `getPckCertChain(uint8)` and selector `0x48ac8059`
     #[derive(
         Clone,
@@ -713,6 +1466,20 @@ pub mod pck_dao {
     pub struct GetPckCertChainReturn {
         pub intermediate_cert: ::ethers::core::types::Bytes,
         pub root_cert: ::ethers::core::types::Bytes,
+    }
+    ///Container type for all return fields from the `getPlatformTcbByIdAndSvns` function with signature `getPlatformTcbByIdAndSvns(string,string,string,string)` and selector `0x7eb619c7`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct GetPlatformTcbByIdAndSvnsReturn {
+        pub tcbm: ::std::string::String,
     }
     ///Container type for all return fields from the `pckCertAttestations` function with signature `pckCertAttestations(bytes32)` and selector `0x68ef0c53`
     #[derive(
@@ -740,7 +1507,33 @@ pub mod pck_dao {
     pub struct PckSchemaIDReturn {
         pub pck_schema_id: [u8; 32],
     }
-    ///Container type for all return fields from the `upsertPckCert` function with signature `upsertPckCert(uint8,string,string,string,string,bytes)` and selector `0xb2611456`
+    ///Container type for all return fields from the `tcbmAttestations` function with signature `tcbmAttestations(bytes32)` and selector `0xe4a4171a`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct TcbmAttestationsReturn(pub [u8; 32]);
+    ///Container type for all return fields from the `tcbmSchemaId` function with signature `tcbmSchemaId()` and selector `0xcbd3805e`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct TcbmSchemaIdReturn {
+        pub tcbm_schema_id: [u8; 32],
+    }
+    ///Container type for all return fields from the `upsertPckCert` function with signature `upsertPckCert(uint8,string,string,string,bytes)` and selector `0x5be0fa4b`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -752,6 +1545,20 @@ pub mod pck_dao {
         Hash
     )]
     pub struct UpsertPckCertReturn {
+        pub attestation_id: [u8; 32],
+    }
+    ///Container type for all return fields from the `upsertPlatformTcbs` function with signature `upsertPlatformTcbs(string,string,string,string,string)` and selector `0xc925d17a`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct UpsertPlatformTcbsReturn {
         pub attestation_id: [u8; 32],
     }
 }
