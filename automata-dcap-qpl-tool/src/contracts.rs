@@ -172,6 +172,7 @@ pub fn upsert_enclave_identity(
     prv_key: &str,
     chain_id: u64,
     enclave_id: EnclaveID,
+    collateral_version: String,
     enclave_identity_str: &str,
     enclave_identity_issuer_chains_str: &str,
 ) {
@@ -262,7 +263,17 @@ pub fn upsert_enclave_identity(
         }
     }
     let id = U256::from(enclave_id as u32);
-    let version = U256::from(2u32);
+    let version = if collateral_version == "v1".to_string() {
+        U256::from(1u32)
+    } else if collateral_version == "v2".to_string() {
+        U256::from(2u32)
+    } else if collateral_version == "v3".to_string() {
+        U256::from(3u32)
+    } else if collateral_version == "v4".to_string() {
+        U256::from(4u32)
+    } else {
+        U256::from(3u32) // use v3 as default dcap attestation version
+    };
     let enclave_identity: EnclaveIdentity = serde_json::from_str(enclave_identity_str).unwrap();
     let enclave_identity_obj = EnclaveIdentityJsonObj {
         identity_str: serde_json::to_string(&enclave_identity.enclave_identity).unwrap(),
@@ -346,6 +357,7 @@ pub fn update_verification_collateral(
     pck_crl: &str,
     tcb_info_str: &str,
     enclave_id: EnclaveID,
+    collateral_version: String,
     enclave_identity_str: &str,
     enclave_identity_issuer_chains_str: &str,
 ) {
@@ -433,6 +445,7 @@ pub fn update_verification_collateral(
         prv_key,
         chain_id,
         enclave_id,
+        collateral_version,
         enclave_identity_str,
         enclave_identity_issuer_chains_str,
     );

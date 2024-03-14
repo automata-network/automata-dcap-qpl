@@ -260,6 +260,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
             pck_crl,
             tcb_info_str,
             enclave_id,
+            collateral_version.clone(),
             enclave_identity_str,
             enclave_identity_issuer_chains_str,
         );
@@ -521,6 +522,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
             pck_crl,
             tcb_info_str,
             enclave_id,
+            collateral_version.clone(),
             enclave_identity_str,
             enclave_identity_issuer_chains_str,
         );
@@ -727,6 +729,7 @@ pub fn sgx_ql_get_qve_identity(
             &private_key,
             chain_id,
             EnclaveID::QVE,
+            collateral_version.clone(),
             &qve_identity_str,
             &issuer_chains_str,
         );

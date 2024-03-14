@@ -53,42 +53,6 @@ struct Opt {
 }
 
 fn main() {
-    // let abi_source = "/data/jiaquan/code/automata-on-chain-pccs/out/EnclaveIdentityDao.sol/EnclaveIdentityDao.json";
-    // let out_file = std::env::temp_dir().join("EnclaveIdentityDao.rs");
-    // if out_file.exists() {
-    //     std::fs::remove_file(&out_file).unwrap();
-    // }
-    // ethers::prelude::Abigen::new("EnclaveIdentityDao", abi_source).unwrap().generate().unwrap().write_to_file(out_file).unwrap();
-
-    // let abi_source = "/data/jiaquan/code/automata-on-chain-pccs/out/FmspcTcbDao.sol/FmspcTcbDao.json";
-    // let out_file = std::env::temp_dir().join("FmspcTcbDao.rs");
-    // if out_file.exists() {
-    //     std::fs::remove_file(&out_file).unwrap();
-    // }
-    // ethers::prelude::Abigen::new("FmspcTcbDao", abi_source).unwrap().generate().unwrap().write_to_file(out_file).unwrap();
-
-    // let abi_source = "/data/jiaquan/code/automata-on-chain-pccs/out/PckDao.sol/PckDao.json";
-    // let out_file = std::env::temp_dir().join("PckDao.rs");
-    // if out_file.exists() {
-    //     std::fs::remove_file(&out_file).unwrap();
-    // }
-    // ethers::prelude::Abigen::new("PckDao", abi_source).unwrap().generate().unwrap().write_to_file(out_file).unwrap();
-
-    // let abi_source = "/data/jiaquan/code/automata-on-chain-pccs/out/PcsDao.sol/PcsDao.json";
-    // let out_file = std::env::temp_dir().join("PcsDao.rs");
-    // if out_file.exists() {
-    //     std::fs::remove_file(&out_file).unwrap();
-    // }
-    // ethers::prelude::Abigen::new("PcsDao", abi_source).unwrap().generate().unwrap().write_to_file(out_file).unwrap();
-
-    // let abi_source = "/data/jiaquan/code/automata-on-chain-pccs/out/PlatformTcbsDao.sol/PlatformTcbsDao.json";
-    // let out_file = std::env::temp_dir().join("PlatformTcbsDao.rs");
-    // if out_file.exists() {
-    //     std::fs::remove_file(&out_file).unwrap();
-    // }
-    // ethers::prelude::Abigen::new("PlatformTcbsDao", abi_source).unwrap().generate().unwrap().write_to_file(out_file).unwrap();
-    // return;
-
     let opt = Opt::from_args();
     let data_source = if opt.source == "Local".to_string() {
         DataSource::Local

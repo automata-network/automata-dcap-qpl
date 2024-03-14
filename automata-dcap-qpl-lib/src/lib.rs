@@ -14,6 +14,8 @@ use std::ffi::{c_char, CStr, CString};
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
+const COLLATERAL_VERSION_ENV: &str = "AUTOMATA_DCAP_COLLATERAL_VERSION";
+
 pub fn into_raw_parts<T>(vec: Vec<T>) -> (*mut T, usize, usize) {
     let mut vec = ManuallyDrop::new(vec);
     let length = vec.len();
@@ -320,7 +322,25 @@ pub extern "C" fn sgx_ql_get_qve_identity(
     }
 
     let id = U256::from(EnclaveID::QVE as u32);
-    let version = U256::from(2u32);
+    let collateral_version = match std::env::var(COLLATERAL_VERSION_ENV) {
+        Ok(v) => {
+            if v == "v1" || v == "V1" || v == "1" {
+                1
+            } else if v == "v2" || v == "V2" || v == "2" {
+                2
+            } else if v == "v3" || v == "V3" || v == "3" {
+                3
+            } else if v == "v4" || v == "V4" || v == "4" {
+                4
+            } else {
+                3 // use v3 as default dcap attestation version
+            }
+        },
+        Err(_) => {
+            3 // use v3 as default dcap attestation version
+        }
+    };
+    let version = U256::from(collateral_version);
 
     let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
     let client = Arc::new(provider);
@@ -554,8 +574,25 @@ fn sgx_ql_fetch_quote_verification_collateral(
         .build()
         .unwrap();
     let tcb_type = U256::from(sgx_prod_type as u32);
-    // TOOD which version shall we use here? v2 or v3?
-    let version = U256::from(2);
+    let collateral_version = match std::env::var(COLLATERAL_VERSION_ENV) {
+        Ok(v) => {
+            if v == "v1" || v == "V1" || v == "1" {
+                1
+            } else if v == "v2" || v == "V2" || v == "2" {
+                2
+            } else if v == "v3" || v == "V3" || v == "3" {
+                3
+            } else if v == "v4" || v == "V4" || v == "4" {
+                4
+            } else {
+                3 // use v3 as default dcap attestation version
+            }
+        },
+        Err(_) => {
+            3 // use v3 as default dcap attestation version
+        }
+    };
+    let version = U256::from(collateral_version);
     let tcb_info: TcbInfoJsonObj = match rt.block_on(
         fmspc_tcb_dao
             .get_tcb_info(tcb_type, fmspc_string, version)
@@ -594,7 +631,25 @@ fn sgx_ql_fetch_quote_verification_collateral(
     } else {
         U256::from(EnclaveID::TD_QE as u32)
     };
-    let version = U256::from(2u32);
+    let collateral_version = match std::env::var(COLLATERAL_VERSION_ENV) {
+        Ok(v) => {
+            if v == "v1" || v == "V1" || v == "1" {
+                1
+            } else if v == "v2" || v == "V2" || v == "2" {
+                2
+            } else if v == "v3" || v == "V3" || v == "3" {
+                3
+            } else if v == "v4" || v == "V4" || v == "4" {
+                4
+            } else {
+                3 // use v3 as default dcap attestation version
+            }
+        },
+        Err(_) => {
+            3 // use v3 as default dcap attestation version
+        }
+    };
+    let version = U256::from(collateral_version);
     let qe: EnclaveIdentityJsonObj = match rt.block_on(
         enclave_identity_dao
             .get_enclave_identity(id, version)

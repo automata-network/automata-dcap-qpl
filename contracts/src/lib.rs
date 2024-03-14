@@ -7,7 +7,7 @@ pub mod pcs_dao;
 Verax addresses
 "0xeAce48c11258Ec79c941Daee80343298dC084Be3", // EnclaveIdentityDaoPortal
 "0x1930D878D4BAbb10b2C20F65D84a54fdf709959A", // FmspcTcbDaoPortal
-"0x07984d9D2b42A8566B3540eCd223F7c610F78Eb2", // PckDaoPortal
+"0x9028731dDfCCA8695F2De2834eAEf8c10BBEccf0", // PckDaoPortal
 "0xC4838158D29C7DB6D344dDB4C082dB0f30C8073e", // PcsDaoPortal
  */
 
