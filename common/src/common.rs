@@ -371,22 +371,22 @@ impl SgxQlConfig {
     }
 
     pub fn print(&self) {
-        println!("SgxQlConfig");
-        println!("cert_cpu_svn: {:?}", self.cert_cpu_svn.cpu_svn);
+        println!("[Automata DCAP QPL] SgxQlConfig");
+        println!("[Automata DCAP QPL] cert_cpu_svn: {:?}", self.cert_cpu_svn.cpu_svn);
         println!(
-            "cert_pce_isv_svn: {:?}",
+            "[Automata DCAP QPL] cert_pce_isv_svn: {:?}",
             self.cert_pce_isv_svn.isv_svn as u16
         );
-        println!("cert_data_size: {:?}", self.cert_data_size as u32);
+        println!("[Automata DCAP QPL] cert_data_size: {:?}", self.cert_data_size as u32);
         let cert_data =
             unsafe { std::slice::from_raw_parts(self.cert_data, self.cert_data_size as usize) };
-        println!("cert_data: {}", std::str::from_utf8(cert_data).unwrap());
+        println!("[Automata DCAP QPL] cert_data: {}", std::str::from_utf8(cert_data).unwrap());
     }
 }
 
 impl Drop for SgxQlConfig {
     fn drop(&mut self) {
-        println!("free-ing sgx_ql_config cert_data");
+        println!("[Automata DCAP QPL] free-ing sgx_ql_config cert_data");
         // free cert_data
         // unsafe { std::alloc::dealloc(self.cert_data, std::alloc::Layout::from_size_align_unchecked(self.cert_data_size as usize, 1)) };
         let certs = unsafe { Vec::from_raw_parts(self.cert_data, self.cert_data_size as usize, self.cert_data_size as usize) };
@@ -447,7 +447,7 @@ impl SgxQlQveCollateral {
     }
 
     pub fn print(&self) {
-        println!("---SgxQlQveCollateral---");
+        println!("[Automata DCAP QPL] ---SgxQlQveCollateral---");
         let version = unsafe {
             if self.tee_type == 0x0 {
                 format!("{}", std::mem::transmute::<u32, u32>(self.version.version))
@@ -459,90 +459,74 @@ impl SgxQlQveCollateral {
                 )
             }
         };
-        println!("  version: {:?}", version);
+        println!("[Automata DCAP QPL]  version: {:?}", version);
         let tee_type = unsafe { std::mem::transmute::<u32, u32>(self.tee_type) };
-        println!("  tee_type: {:?}", tee_type);
+        println!("[Automata DCAP QPL]  tee_type: {:?}", tee_type);
 
         println!(
-            "  pck_crl_issuer_chain_size: {:?}",
+            "[Automata DCAP QPL]  pck_crl_issuer_chain_size: {:?}",
             self.pck_crl_issuer_chain_size as usize
         );
-        // println!(
-        //     "  pck_crl_issuer_chain pointer: {:?}",
-        //     self.pck_crl_issuer_chain as usize
-        // );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.pck_crl_issuer_chain) };
         println!(
-            "  pck_crl_issuer_chain: {}",
+            "[Automata DCAP QPL]  pck_crl_issuer_chain: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("  root_ca_crl_size: {:?}", self.root_ca_crl_size as usize);
-        // println!("  root_ca_crl pointer: {:?}", self.root_ca_crl as usize);
+        println!("[Automata DCAP QPL]  root_ca_crl_size: {:?}", self.root_ca_crl_size as usize);
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.root_ca_crl) };
         println!(
-            "  root_ca_crl_size: {}",
+            "[Automata DCAP QPL]  root_ca_crl_size: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("  pck_crl_size: {:?}", self.pck_crl_size as usize);
-        // println!("  pck_crl pointer: {:?}", self.pck_crl as usize);
+        println!("[Automata DCAP QPL]  pck_crl_size: {:?}", self.pck_crl_size as usize);
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.pck_crl) };
         println!(
-            "  pck_crl: {}",
+            "[Automata DCAP QPL]  pck_crl: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
         println!(
-            "  tcb_info_issuer_chain_size: {:?}",
+            "[Automata DCAP QPL]  tcb_info_issuer_chain_size: {:?}",
             self.tcb_info_issuer_chain_size as usize
         );
-        // println!(
-        //     "  tcb_info_issuer_chain pointer: {:?}",
-        //     self.tcb_info_issuer_chain as usize
-        // );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.tcb_info_issuer_chain) };
         println!(
-            "  tcb_info_issuer_chain: {}",
+            "[Automata DCAP QPL]  tcb_info_issuer_chain: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("  tcb_info_size: {:?}", self.tcb_info_size as usize);
-        // println!("  tcb_info pointer: {:?}", self.tcb_info as usize);
+        println!("[Automata DCAP QPL]  tcb_info_size: {:?}", self.tcb_info_size as usize);
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.tcb_info) };
         println!(
-            "  tcb_info: {}",
+            "[Automata DCAP QPL]  tcb_info: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
         println!(
-            "  qe_identity_issuer_chain_size: {:?}",
+            "[Automata DCAP QPL]  qe_identity_issuer_chain_size: {:?}",
             self.qe_identity_issuer_chain_size as usize
         );
-        // println!(
-        //     "  qe_identity_issuer_chain pointer: {:?}",
-        //     self.qe_identity_issuer_chain as usize
-        // );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.qe_identity_issuer_chain) };
         println!(
-            "  qe_identity_issuer_chain: {}",
+            "[Automata DCAP QPL]  qe_identity_issuer_chain: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("  qe_identity_size: {:?}", self.qe_identity_size as usize);
-        // println!("  qe_identity pointer: {:?}", self.qe_identity as usize);
+        println!("[Automata DCAP QPL]  qe_identity_size: {:?}", self.qe_identity_size as usize);
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.qe_identity) };
         println!(
-            "  qe_identity: {}",
+            "[Automata DCAP QPL]  qe_identity: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
-        println!("---SgxQlQveCollateral---");
+        println!("[Automata DCAP QPL] ---SgxQlQveCollateral---");
     }
 }
 
 impl Drop for SgxQlQveCollateral {
     fn drop(&mut self) {
-        println!("free-ing sql_ql_qve_collateral data");
+        println!("[Automata DCAP QPL] free-ing sql_ql_qve_collateral data");
         self.pck_crl_issuer_chain_size = 0;
         self.root_ca_crl_size = 0;
         self.pck_crl_size = 0;
