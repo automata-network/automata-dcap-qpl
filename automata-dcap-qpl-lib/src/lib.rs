@@ -16,6 +16,8 @@ use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
 const COLLATERAL_VERSION_ENV: &str = "AUTOMATA_DCAP_COLLATERAL_VERSION";
+const AZURE_DCAP_CLIENT_SO: &str = "libdcap_az_client.so";
+const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
 
 pub fn into_raw_parts<T>(vec: Vec<T>) -> (*mut T, usize, usize) {
     let mut vec = ManuallyDrop::new(vec);
@@ -827,6 +829,16 @@ fn get_collateral_version() -> u32 {
     }
 }
 
+fn get_intel_pcs_subscription_key() -> Result<String, Quote3Error> {
+    match std::env::var(INTEL_PCS_SUBSCRIPTION_KEY_ENV) {
+        Ok(v) => { Ok(v) },
+        Err(_) => {
+            println!("[Auotmata DCAP QPL] pleause configure the intel pcs subscription key");
+            Err(Quote3Error::SgxQlErrorUnexpected)
+        }
+    }
+}
+
 fn az_dcap_call_sgx_ql_get_quote_config(
     p_pck_cert_id: *const SgxQlPckCertId,
     pp_quote_config: *mut *mut SgxQlConfig,
@@ -841,14 +853,13 @@ fn az_dcap_call_sgx_ql_get_quote_config(
         format!("v{}", get_collateral_version()),
     );
     unsafe {
-        let lib = match Library::new("libdcap_az_client.so") {
+        let lib = match Library::new(AZURE_DCAP_CLIENT_SO) {
             Ok(l) => l,
             Err(_) => {
                 println!(
                     "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
                 );
-                // TODO fallback
-                return (Quote3Error::SgxQlErrorUnexpected, false);
+                return (intel_pcs_call_sgx_ql_get_quote_config(p_pck_cert_id, pp_quote_config), false);
             }
         };
         let func: Symbol<
@@ -860,7 +871,7 @@ fn az_dcap_call_sgx_ql_get_quote_config(
 
 fn az_dcap_call_sgx_ql_free_quote_config(p_quote_config: *mut SgxQlConfig) -> Quote3Error {
     unsafe {
-        let lib = Library::new("libdcap_az_client.so").unwrap();
+        let lib = Library::new(AZURE_DCAP_CLIENT_SO).unwrap();
         let func: Symbol<unsafe extern "C" fn(*mut SgxQlConfig) -> Quote3Error> =
             lib.get(b"sgx_ql_free_quote_config").unwrap();
         func(p_quote_config)
@@ -883,7 +894,7 @@ fn az_dcap_call_sgx_ql_get_qve_identity(
         format!("v{}", get_collateral_version()),
     );
     unsafe {
-        let lib = match Library::new("libdcap_az_client.so") {
+        let lib = match Library::new(AZURE_DCAP_CLIENT_SO) {
             Ok(l) => l,
             Err(_) => {
                 println!(
@@ -918,7 +929,7 @@ fn az_dcap_call_sgx_ql_free_qve_identity(
     p_qve_identity_issuer_chain: *mut c_char,
 ) -> Quote3Error {
     unsafe {
-        let lib = Library::new("libdcap_az_client.so").unwrap();
+        let lib = Library::new(AZURE_DCAP_CLIENT_SO).unwrap();
         let func: Symbol<unsafe extern "C" fn(*mut c_char, *mut c_char) -> Quote3Error> =
             lib.get(b"sgx_ql_free_qve_identity").unwrap();
         func(p_qve_identity, p_qve_identity_issuer_chain)
@@ -947,7 +958,7 @@ fn az_dcap_call_get_quote_verification_collateral(
         b"tdx_ql_get_quote_verification_collateral"
     };
     unsafe {
-        let lib = match Library::new("libdcap_az_client.so") {
+        let lib = match Library::new(AZURE_DCAP_CLIENT_SO) {
             Ok(l) => l,
             Err(_) => {
                 println!(
@@ -979,7 +990,7 @@ fn az_dcap_call_free_quote_verification_collateral(
         b"tdx_ql_free_quote_verification_collateral"
     };
     unsafe {
-        let lib = Library::new("libdcap_az_client.so").unwrap();
+        let lib = Library::new(AZURE_DCAP_CLIENT_SO).unwrap();
         let func: Symbol<unsafe extern "C" fn(*mut SgxQlQveCollateral) -> Quote3Error> =
             lib.get(symbol_name).unwrap();
         func(p_quote_collateral)
@@ -1000,7 +1011,7 @@ fn az_dcap_call_sgx_ql_get_root_ca_crl(
         format!("v{}", get_collateral_version()),
     );
     unsafe {
-        let lib = match Library::new("libdcap_az_client.so") {
+        let lib = match Library::new(AZURE_DCAP_CLIENT_SO) {
             Ok(l) => l,
             Err(_) => {
                 println!(
@@ -1018,7 +1029,7 @@ fn az_dcap_call_sgx_ql_get_root_ca_crl(
 
 fn az_dcap_call_sgx_ql_free_root_ca_crl(p_root_ca_crl: *mut c_char) -> Quote3Error {
     unsafe {
-        let lib = Library::new("libdcap_az_client.so").unwrap();
+        let lib = Library::new(AZURE_DCAP_CLIENT_SO).unwrap();
         let func: Symbol<unsafe extern "C" fn(*mut c_char) -> Quote3Error> =
             lib.get(b"sgx_ql_free_root_ca_crl").unwrap();
         func(p_root_ca_crl)
@@ -1260,4 +1271,133 @@ fn fallback_to_az_dcap_call_sgx_ql_get_root_ca_crl(
         az_dcap_call_sgx_ql_free_root_ca_crl(p_az_root_ca_crl);
     }
     return ret;
+}
+
+// Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
+fn intel_pcs_call_sgx_ql_get_quote_config(
+    p_pck_cert_id: *const SgxQlPckCertId,
+    pp_quote_config: *mut *mut SgxQlConfig,
+) -> Quote3Error {
+    let collateral_version = format!("v{}", get_collateral_version());
+    let pck_cert_id = unsafe { *p_pck_cert_id };
+    let cpu_svn = unsafe { *pck_cert_id.p_platform_cpu_svn };
+    let pce_svn = unsafe { *pck_cert_id.p_platform_pce_isv_svn };
+    let encrypted_ppid = unsafe {
+        std::slice::from_raw_parts(
+            pck_cert_id.p_encrypted_ppid,
+            pck_cert_id.encrypted_ppid_size as usize,
+        )
+    };
+    let encrypted_ppid = if encrypted_ppid.len() > 0 {
+        hex::encode(encrypted_ppid)
+    } else {
+        hex::encode([0; 384])
+    };
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/sgx/certification/{}/pckcert",
+        collateral_version.clone(),
+    );
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let client = reqwest::Client::new();
+    let query_params = vec![
+        ("cpusvn".to_string(), hex::encode(cpu_svn.cpu_svn)),
+        ("pcesvn".to_string(), hex::encode(pce_svn.isv_svn.to_le_bytes())),
+        ("pceid".to_string(), hex::encode(pck_cert_id.pce_id.to_le_bytes())),
+        ("encrypted_ppid".to_string(), encrypted_ppid)
+    ];
+    let intel_pcs_subscription_key = match get_intel_pcs_subscription_key() {
+        Ok(v) => v,
+        Err(_) => return Quote3Error::SgxQlErrorUnexpected
+    };
+    let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
+    let response = match rt.block_on(
+        client
+            .get(req_url.clone())
+            .header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str)
+            .query(&query_params)
+            .send()
+        ) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[Automata DCAP QPL] unable to get {}", req_url);
+            return Quote3Error::SgxQlErrorUnexpected;
+        }
+    };
+    if response.status().is_success() {
+        let headers = response.headers();
+        let issuer_chain = if let Some(cert) = headers.get("SGX-PCK-Certificate-Issuer-Chain") {
+            println!("[Automata DCAP QPL] Intel PCS gets SGX-PCK-Certificate-Issuer-Chain: {:?}", cert);
+            cert.to_str().unwrap().to_string()
+        } else {
+            println!("[Automata DCAP QPL] unable to get SGX-PCK-Certificate-Issuer-Chain");
+            return Quote3Error::SgxQlErrorUnexpected;
+        };
+        let tcbm = if let Some(tcbm) = headers.get("SGX-TCBm") {
+            println!("[Automata DCAP QPL] Intel PCS gets tcbm: {:?}", tcbm);
+            tcbm.to_str().unwrap().to_string()
+        } else {
+            println!("[Automata DCAP QPL] unable to get tcbm");
+            return Quote3Error::SgxQlErrorUnexpected;
+        };
+        let leaf_cert = match rt.block_on(response.text()) {
+            Ok(v) => v,
+            Err(_) => {
+                println!("[Automata DCAP QPL] unable to get the content of {}", req_url);
+                return Quote3Error::SgxQlErrorUnexpected;
+            }
+        };
+        println!("[Automata DCAP QPL] Intel PCS gets SGX-PCK-Cert: {:?}", leaf_cert);
+
+        let tcbm = hex::decode(tcbm.trim_start_matches("0x")).unwrap();
+        assert!(tcbm.len() == 18);
+        let tcbm_cpu_svn_slices = &tcbm[0..16];
+        let tcbm_cpu_svn: [u8; 16] = tcbm_cpu_svn_slices.try_into().unwrap();
+        let tcbm_pce_svn = tcbm[17] as u16 * 16 + tcbm[16] as u16;
+        println!(
+            "[Automata DCAP QPL] tcbm.cpu_svn: {:?}",
+            hex::encode(tcbm_cpu_svn)
+        );
+        println!(
+            "[Automata DCAP QPL] tcbm.pce_svn: {:?}",
+            hex::encode(tcbm_pce_svn.to_le_bytes())
+        );
+
+        let mut certs = Vec::new();
+        certs.append(&mut leaf_cert.as_bytes().to_vec());
+        let decoded_issuer_chain_str = urlencoding::decode(&issuer_chain).expect("Invalid UTF-8");
+        let decoded_issuer_chain = decoded_issuer_chain_str.to_string();
+        certs.append(&mut decoded_issuer_chain.as_bytes().to_vec());
+        let mut ending = vec![0u8];
+        certs.append(&mut ending);
+        certs.truncate(certs.len());
+        let (certs, cert_len, _) = into_raw_parts(certs);
+
+        let quote_config = SgxQlConfig::new(tcbm_cpu_svn, tcbm_pce_svn, certs, cert_len);
+        unsafe {
+            *pp_quote_config = Box::into_raw(Box::new(quote_config));
+        }
+        let quote_config = unsafe { *pp_quote_config };
+        println!("[Automata DCAP QPL] quote_config: {:?}", quote_config);
+        let cert_data = unsafe {
+            std::slice::from_raw_parts(
+                (*quote_config).cert_data,
+                (*quote_config).cert_data_size as usize,
+            )
+        };
+        println!("[Automata DCAP QPL] cert len: {}", unsafe {
+            (*quote_config).cert_data_size as usize
+        });
+        println!("[Automata DCAP QPL] cert: {:?}", cert_data);
+        println!(
+            "[Automata DCAP QPL] certdata: {}",
+            std::str::from_utf8(cert_data).unwrap()
+        );
+    } else {
+        println!("[Automata DCAP QPL] unable to get pck cert from intel pcs: {}, response.status() = {:?}", req_url, response.status());
+        return Quote3Error::SgxQlErrorUnexpected;
+    }
+    return Quote3Error::SgxQlSuccess;
 }
