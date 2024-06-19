@@ -833,7 +833,13 @@ fn get_collateral_version() -> u32 {
 
 fn get_intel_pcs_subscription_key() -> Result<String, Quote3Error> {
     match std::env::var(INTEL_PCS_SUBSCRIPTION_KEY_ENV) {
-        Ok(v) => { Ok(v) },
+        Ok(v) => {
+            if v.is_empty() {
+                println!("[Auotmata DCAP QPL] pleause configure the intel pcs subscription key");
+                return Err(Quote3Error::SgxQlErrorUnexpected);
+            }
+            Ok(v)
+        },
         Err(_) => {
             println!("[Auotmata DCAP QPL] pleause configure the intel pcs subscription key");
             Err(Quote3Error::SgxQlErrorUnexpected)
@@ -1310,18 +1316,18 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
         ("pceid".to_string(), hex::encode(pck_cert_id.pce_id.to_le_bytes())),
         ("encrypted_ppid".to_string(), encrypted_ppid)
     ];
-    let intel_pcs_subscription_key = match get_intel_pcs_subscription_key() {
-        Ok(v) => v,
-        Err(_) => return Quote3Error::SgxQlErrorUnexpected
-    };
-    let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
-    let response = match rt.block_on(
-        client
-            .get(req_url.clone())
-            .header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str)
-            .query(&query_params)
-            .send()
-        ) {
+    let mut req_builder = client
+        .get(req_url.clone())
+        .query(&query_params);
+    if collateral_version == "v3" {
+        let intel_pcs_subscription_key = match get_intel_pcs_subscription_key() {
+            Ok(v) => v,
+            Err(_) => return Quote3Error::SgxQlErrorUnexpected
+        };
+        let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
+        req_builder = req_builder.header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str);
+    }
+    let response = match rt.block_on(req_builder.send()) {
         Ok(v) => v,
         Err(_) => {
             println!("[Automata DCAP QPL] unable to get {}", req_url);
