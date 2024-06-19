@@ -670,7 +670,9 @@ fn sgx_ql_fetch_quote_verification_collateral(
         .unwrap();
     let tcb_type = U256::from(sgx_prod_type as u32);
     let collateral_version = get_collateral_version();
-    let version = U256::from(collateral_version);
+    // Currently APIv3 returns TCBInfoV2, APIv4 returns TCBInfoV3
+    // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
+    let version = U256::from(collateral_version - 1);
     let tcb_info: TcbInfoJsonObj = match rt.block_on(
         fmspc_tcb_dao
             .get_tcb_info(tcb_type, fmspc_string, version)
