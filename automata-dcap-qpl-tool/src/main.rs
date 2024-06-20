@@ -73,18 +73,19 @@ fn main() {
     // TODO How to parse the user's input parameters for each function
     if opt.func == "sgx_ql_get_quote_config".to_string() {
         let mut qe_id =
-            hex::decode("ad04024c9dfb382baf51ca3e5d6cb6e6").expect("Failed to decode hex string");
+            hex::decode("f28dda234595e56eaeb7ce9b681a62cd").expect("Failed to decode hex string");
         let mut cpu_svn = SgxCpuSvn {
-            cpu_svn: [12, 12, 16, 15, 255, 255, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            cpu_svn: [14, 14, 16, 15, 255, 255, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         };
         let mut isv_svn = SgxIsvSvn { isv_svn: 14 };
+        let mut encrypted_ppid = hex::decode("096dc5bebd0be1e7786768e390eec435558a2660d4649822b71d0d521d87f09e7f1ad1fbd239d57e2e57fc80261985144187dbcfe94c9f277f7974e3f823ed833a0473646844ef0f7e6da6e36b0d1eb86de2a3d169b3559ec54b09cd7fef64ae834629dcb89276c4eac37982057e71737341e77d7a3befba80739bf07407a51cfe108223f9aa01145bce895c48a322435c626f6f78d95fba0b64d07dd65d4cfe3ef586696f242c5e5548421fbd2056c3e1a5e40454369d38ae9ca0f8cb0c5cc8b5f5f66602c4cbb683357383e29cb09e35bbcc4e630a151f885ef486bf89e06b3348f135441ab0a6ac3cc284524e1137bbc1271021db2917294451c6e628a9094a64ab48a49568bbbde1026c0a19c6cf4f48b0ce8686a33c7eedf16aef2039b0729738c7484aa9b78f7f43654cacb6c2d536e0ebd8759620237a174b5c8b1ac893b16d762c8c18010feab74d5aafb35b1374e711c9d880adc8a5aff2b77be825084f9db216cbb426c8fbae89266126aa22c36dbb1e0e9f7c3baa9f8a5f743e4e").expect("Failed to decode hex string");
         let pck_cert_id: SgxQlPckCertId = SgxQlPckCertId {
             p_qe3_id: qe_id.as_mut_ptr(),
             qe3_id_size: 16,
             p_platform_cpu_svn: &mut cpu_svn as *mut SgxCpuSvn,
             p_platform_pce_isv_svn: &mut isv_svn as *mut SgxIsvSvn,
-            p_encrypted_ppid: std::ptr::null_mut(),
-            encrypted_ppid_size: 0,
+            p_encrypted_ppid: encrypted_ppid.as_mut_ptr(),
+            encrypted_ppid_size: 384,
             crypto_suite: 1,
             pce_id: 0,
         };

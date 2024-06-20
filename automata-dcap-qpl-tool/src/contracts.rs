@@ -6,7 +6,7 @@ use automata_dcap_qpl_contracts::{
     pck_dao::PckDao,
     pcs_dao::PcsDao,
     ENCLAVE_IDENTITY_DAO_PORTAL_CONTRACT_ADDRESS, FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS,
-    PCK_DAO_PORTAL_CONTRACT_ADDRESS, PCS_DAO_PORTAL_CONTRACT_ADDRESS, VERAX_RPC_URL,
+    PCK_DAO_PORTAL_CONTRACT_ADDRESS, PCS_DAO_PORTAL_CONTRACT_ADDRESS, RPC_URL,
 };
 use ethers::prelude::*;
 use hex::FromHex;
@@ -24,7 +24,7 @@ pub fn upsert_pck_cert(
     tcbm: String,
     cert_chains_str: &str,
 ) {
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let wallet = prv_key.parse::<LocalWallet>().unwrap();
     let signer = Arc::new(SignerMiddleware::new(
         provider,
@@ -176,7 +176,7 @@ pub fn upsert_enclave_identity(
     enclave_identity_str: &str,
     enclave_identity_issuer_chains_str: &str,
 ) {
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let wallet = prv_key.parse::<LocalWallet>().unwrap();
     let signer = Arc::new(SignerMiddleware::new(
         provider,
@@ -308,7 +308,7 @@ pub fn upsert_enclave_identity(
 }
 
 pub fn upsert_root_ca_crl(prv_key: &str, chain_id: u64, crl: &str) {
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let wallet = prv_key.parse::<LocalWallet>().unwrap();
     let signer = Arc::new(SignerMiddleware::new(
         provider,
@@ -352,7 +352,7 @@ pub fn upsert_root_ca_crl(prv_key: &str, chain_id: u64, crl: &str) {
 pub fn update_verification_collateral(
     prv_key: &str,
     chain_id: u64,
-    root_ca_crl: &str,
+    root_ca_crl: Option<&str>,
     pck: CAID,
     pck_crl: &str,
     tcb_info_str: &str,
@@ -361,7 +361,7 @@ pub fn update_verification_collateral(
     enclave_identity_str: &str,
     enclave_identity_issuer_chains_str: &str,
 ) {
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let wallet = prv_key.parse::<LocalWallet>().unwrap();
     let signer = Arc::new(SignerMiddleware::new(
         provider,
@@ -379,7 +379,9 @@ pub fn update_verification_collateral(
     let fmspc_tcb_dao = FmspcTcbDao::new(fmspc_tcb_dao_address, signer.clone());
 
     // Root CA CRL
-    upsert_root_ca_crl(prv_key, chain_id, root_ca_crl);
+    if let Some(root_ca_crl) = root_ca_crl {
+        upsert_root_ca_crl(prv_key, chain_id, root_ca_crl);
+    }
 
     // PCK CRL
     let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {

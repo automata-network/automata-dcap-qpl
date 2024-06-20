@@ -5,7 +5,7 @@ use automata_dcap_qpl_contracts::{
     pck_dao::PckDao,
     pcs_dao::PcsDao,
     ENCLAVE_IDENTITY_DAO_PORTAL_CONTRACT_ADDRESS, FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS,
-    PCK_DAO_PORTAL_CONTRACT_ADDRESS, PCS_DAO_PORTAL_CONTRACT_ADDRESS, VERAX_RPC_URL,
+    PCK_DAO_PORTAL_CONTRACT_ADDRESS, PCS_DAO_PORTAL_CONTRACT_ADDRESS, RPC_URL,
 };
 
 use ethers::prelude::*;
@@ -83,7 +83,7 @@ pub extern "C" fn sgx_ql_get_quote_config(
     );
     let pce_id_str = hex::encode(pck_cert_id.pce_id.to_le_bytes());
 
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let client = Arc::new(provider);
     let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
     let pcs_dao = PcsDao::new(pcs_dao_address, client.clone());
@@ -383,7 +383,7 @@ pub extern "C" fn sgx_ql_get_qve_identity(
     let collateral_version = get_collateral_version();
     let version = U256::from(collateral_version);
 
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let client = Arc::new(provider);
     let enclave_identity_dao_address = ENCLAVE_IDENTITY_DAO_PORTAL_CONTRACT_ADDRESS
         .parse::<Address>()
@@ -504,7 +504,7 @@ pub extern "C" fn sgx_ql_get_root_ca_crl(
         return Quote3Error::SgxQlErrorInvalidParameter;
     }
 
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let client = Arc::new(provider);
     let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
     let pcs_dao = PcsDao::new(pcs_dao_address, client);
@@ -590,7 +590,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
     println!("[Automata DCAP QPL] fmspc: {:?}", fmspc_string);
 
     // Get PCK CRL
-    let provider = Provider::<Http>::try_from(VERAX_RPC_URL).unwrap();
+    let provider = Provider::<Http>::try_from(RPC_URL).unwrap();
     let client = Arc::new(provider);
     let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
     let pcs_dao = PcsDao::new(pcs_dao_address, client.clone());

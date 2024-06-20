@@ -5,6 +5,18 @@ use automata_dcap_qpl_common::*;
 use reqwest;
 use std::ffi::{c_char, CStr, CString};
 
+const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
+
+fn get_intel_pcs_subscription_key() -> String {
+    match std::env::var(INTEL_PCS_SUBSCRIPTION_KEY_ENV) {
+        Ok(v) => { v },
+        Err(_) => {
+            println!("[ERROR] pleause configure the intel pcs subscription key");
+            format!("")
+        }
+    }
+}
+
 pub fn sgx_ql_get_quote_config(
     private_key: String,
     chain_id: u64,
@@ -93,27 +105,39 @@ pub fn sgx_ql_get_quote_config(
     }
     if data_source == DataSource::All || data_source == DataSource::Local {
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.1 Section
-        let mut req_url = format!(
-            "{}/sgx/certification/{}/pckcert?cpusvn={{{}}}&pcesvn={{{}}}&pceid={{{}}}&qeid={{{}}}",
-            pccs_url.clone(),
+        let encrypted_ppid = if encrypted_ppid.len() > 0 {
+            hex::encode(encrypted_ppid)
+        } else {
+            hex::encode([0; 384])
+        };
+        let req_url = format!(
+            "{}/sgx/certification/{}/pckcert",
+            pccs_url,
             collateral_version.clone(),
-            hex::encode(cpu_svn.cpu_svn),
-            hex::encode(pce_svn.isv_svn.to_le_bytes()),
-            hex::encode(pck_cert_id.pce_id.to_le_bytes()),
-            hex::encode(qe_id),
         );
-        if encrypted_ppid.len() > 0 {
-            req_url = format!(
-                "{}&encrypted_ppid={{{}}}",
-                req_url,
-                hex::encode(encrypted_ppid)
-            );
-        }
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
-        let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        let client = reqwest::Client::new();
+        let query_params = vec![
+            ("cpusvn".to_string(), hex::encode(cpu_svn.cpu_svn)),
+            ("pcesvn".to_string(), hex::encode(pce_svn.isv_svn.to_le_bytes())),
+            ("pceid".to_string(), hex::encode(pck_cert_id.pce_id.to_le_bytes())),
+            ("encrypted_ppid".to_string(), encrypted_ppid)
+        ];
+        let mut req_builder = client
+            .get(req_url.clone())
+            .query(&query_params);
+        if collateral_version == "v3" {
+            let intel_pcs_subscription_key = get_intel_pcs_subscription_key();
+            if intel_pcs_subscription_key.is_empty() {
+                return;
+            }
+            let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
+            req_builder = req_builder.header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str);
+        }
+        let response = match rt.block_on(req_builder.send()) {
             Ok(v) => v,
             Err(_) => {
                 println!("Unable to get {}", req_url);
@@ -152,6 +176,13 @@ pub fn sgx_ql_get_quote_verification_collateral(
     println!("fmspc: {:?}", fmspc);
     println!("pck_ca: {:?}", pck_ca);
 
+    let pck_id = if pck_ca == "platform" {
+        CAID::Platform
+    } else {
+        CAID::Processor
+    };
+    let enclave_id = EnclaveID::QE;
+
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
         let fmspc_slices = fmspc.as_bytes();
@@ -183,11 +214,6 @@ pub fn sgx_ql_get_quote_verification_collateral(
         };
         let root_ca_crl: Vec<u8> = root_ca_crl.to_vec().into_iter().map(|x| x as u8).collect();
         let root_ca_crl = std::str::from_utf8(&root_ca_crl).unwrap();
-        let pck_id = if pck_ca == "platform" {
-            CAID::Platform
-        } else {
-            CAID::Processor
-        };
         let pck_crl = unsafe {
             std::slice::from_raw_parts(
                 p_quote_collateral.as_ref().unwrap().pck_crl,
@@ -208,7 +234,6 @@ pub fn sgx_ql_get_quote_verification_collateral(
         let tcb_info_str = std::str::from_utf8(&tcb_info_str)
             .unwrap()
             .trim_end_matches("\0");
-        let enclave_id = EnclaveID::QE;
         let enclave_identity_str = unsafe {
             std::slice::from_raw_parts(
                 p_quote_collateral.as_ref().unwrap().qe_identity,
@@ -255,7 +280,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
         update_verification_collateral(
             &private_key,
             chain_id,
-            root_ca_crl,
+            Some(root_ca_crl),
             pck_id,
             pck_crl,
             tcb_info_str,
@@ -290,7 +315,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
                 return;
             }
         };
-        if response.status().is_success() {
+        let pck_crl = if response.status().is_success() {
             let headers = response.headers();
             if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
                 println!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
@@ -302,35 +327,40 @@ pub fn sgx_ql_get_quote_verification_collateral(
                     return;
                 }
             };
-            println!("SGX-PCK-CRL: {:?}", content);
-        }
-        // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.7 Section Get Root CA CRL
-        let req_url = format!(
-            "{}/sgx/certification/{}/rootcacrl",
-            pccs_url,
-            collateral_version.clone()
-        );
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let response = match rt.block_on(reqwest::get(req_url.clone())) {
-            Ok(v) => v,
-            Err(_) => {
-                println!("Unable to get {}", req_url);
-                return;
-            }
+            println!("SGX-PCK-CRL: {}", content);
+            content
+        } else {
+            println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+            return;
         };
-        if response.status().is_success() {
-            let content = match rt.block_on(response.text()) {
-                Ok(v) => v,
-                Err(_) => {
-                    println!("Unable to get the content of {}", req_url);
-                    return;
-                }
-            };
-            println!("SGX-Root-CA-Crl: {:?}", content);
-        }
+        // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.7 Section Get Root CA CRL
+        // This API endpoint is deprecated, cannot find it in https://api.portal.trustedservices.intel.com/content/documentation.html
+        // let req_url = format!(
+        //     "{}/sgx/certification/{}/rootcacrl",
+        //     pccs_url,
+        //     collateral_version.clone()
+        // );
+        // let rt = tokio::runtime::Builder::new_current_thread()
+        //     .enable_all()
+        //     .build()
+        //     .unwrap();
+        // let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        //     Ok(v) => v,
+        //     Err(_) => {
+        //         println!("Unable to get {}", req_url);
+        //         return;
+        //     }
+        // };
+        // if response.status().is_success() {
+        //     let content = match rt.block_on(response.text()) {
+        //         Ok(v) => v,
+        //         Err(_) => {
+        //             println!("Unable to get the content of {}", req_url);
+        //             return;
+        //         }
+        //     };
+        //     println!("SGX-Root-CA-Crl: {:?}", content);
+        // }
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.3 Section Get TCB Info
         let req_url = format!(
             "{}/sgx/certification/{}/tcb?fmspc={}",
@@ -349,7 +379,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
                 return;
             }
         };
-        if response.status().is_success() {
+        let tcb_info_str = if response.status().is_success() {
             let headers = response.headers();
             // v3
             if let Some(cert) = headers.get("SGX-TCB-Info-Issuer-Chain") {
@@ -366,8 +396,12 @@ pub fn sgx_ql_get_quote_verification_collateral(
                     return;
                 }
             };
-            println!("TCB-Info: {:?}", content);
-        }
+            println!("TCB-Info: {}", content);
+            content
+        } else {
+            println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+            return;
+        };
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.4 Section Get QE Identity
         let req_url = format!(
             "{}/sgx/certification/{}/qe/identity",
@@ -387,18 +421,40 @@ pub fn sgx_ql_get_quote_verification_collateral(
         };
         if response.status().is_success() {
             let headers = response.headers();
-            if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                println!("SGX-Enclave-Identity-Issuer-Chain: {:?}", cert);
-            }
-            let content = match rt.block_on(response.text()) {
+            let enclave_identity_issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                cert.to_str().unwrap().to_string()
+            } else {
+                println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
+                return;
+            };
+            let enclave_identity_issuer_chains_str = urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
+            let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
+            let qe_identity_str = match rt.block_on(response.text()) {
                 Ok(v) => v,
                 Err(_) => {
                     println!("Unable to get the content of {}", req_url);
                     return;
                 }
             };
-            println!("SGX-QE-Identity: {:?}", content);
-        }
+            println!("SGX-Enclave-Identity-Issuer-Chain: {}", enclave_identity_issuer_chains_str);
+            println!("SGX-QE-Identity: {}", qe_identity_str);
+
+            update_verification_collateral(
+                &private_key,
+                chain_id,
+                None,
+                pck_id,
+                pck_crl.as_str(),
+                tcb_info_str.as_str(),
+                enclave_id,
+                collateral_version.clone(),
+                qe_identity_str.as_str(),
+                enclave_identity_issuer_chains_str.as_str(),
+            );
+        } else {
+            println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+            return;
+        };
     }
 }
 
@@ -413,6 +469,13 @@ pub fn tdx_ql_get_quote_verification_collateral(
 ) {
     println!("fmspc: {:?}", fmspc);
     println!("pck_ca: {:?}", pck_ca);
+
+    let pck_id = if pck_ca == "platform" {
+        CAID::Platform
+    } else {
+        CAID::Processor
+    };
+    let enclave_id = EnclaveID::TD_QE;
 
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
@@ -445,11 +508,6 @@ pub fn tdx_ql_get_quote_verification_collateral(
         };
         let root_ca_crl: Vec<u8> = root_ca_crl.to_vec().into_iter().map(|x| x as u8).collect();
         let root_ca_crl = std::str::from_utf8(&root_ca_crl).unwrap();
-        let pck_id = if pck_ca == "platform" {
-            CAID::Platform
-        } else {
-            CAID::Processor
-        };
         let pck_crl = unsafe {
             std::slice::from_raw_parts(
                 p_quote_collateral.as_ref().unwrap().pck_crl,
@@ -470,7 +528,6 @@ pub fn tdx_ql_get_quote_verification_collateral(
         let tcb_info_str = std::str::from_utf8(&tcb_info_str)
             .unwrap()
             .trim_end_matches("\0");
-        let enclave_id = EnclaveID::TD_QE;
         let enclave_identity_str = unsafe {
             std::slice::from_raw_parts(
                 p_quote_collateral.as_ref().unwrap().qe_identity,
@@ -517,7 +574,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
         update_verification_collateral(
             &private_key,
             chain_id,
-            root_ca_crl,
+            Some(root_ca_crl),
             pck_id,
             pck_crl,
             tcb_info_str,
@@ -552,7 +609,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
                 return;
             }
         };
-        if response.status().is_success() {
+        let pck_crl = if response.status().is_success() {
             let headers = response.headers();
             if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
                 println!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
@@ -564,35 +621,40 @@ pub fn tdx_ql_get_quote_verification_collateral(
                     return;
                 }
             };
-            println!("SGX-PCK-CRL: {:?}", content);
-        }
-        // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.7 Section Get Root CA CRL
-        let req_url = format!(
-            "{}/sgx/certification/{}/rootcacrl",
-            pccs_url,
-            collateral_version.clone()
-        );
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let response = match rt.block_on(reqwest::get(req_url.clone())) {
-            Ok(v) => v,
-            Err(_) => {
-                println!("Unable to get {}", req_url);
-                return;
-            }
+            println!("SGX-PCK-CRL: {}", content);
+            content
+        } else {
+            println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+            return;
         };
-        if response.status().is_success() {
-            let content = match rt.block_on(response.text()) {
-                Ok(v) => v,
-                Err(_) => {
-                    println!("Unable to get the content of {}", req_url);
-                    return;
-                }
-            };
-            println!("SGX-Root-CA-Crl: {:?}", content);
-        }
+        // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.7 Section Get Root CA CRL
+        // This API endpoint is deprecated, cannot find it in https://api.portal.trustedservices.intel.com/content/documentation.html
+        // let req_url = format!(
+        //     "{}/sgx/certification/{}/rootcacrl",
+        //     pccs_url,
+        //     collateral_version.clone()
+        // );
+        // let rt = tokio::runtime::Builder::new_current_thread()
+        //     .enable_all()
+        //     .build()
+        //     .unwrap();
+        // let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        //     Ok(v) => v,
+        //     Err(_) => {
+        //         println!("Unable to get {}", req_url);
+        //         return;
+        //     }
+        // };
+        // if response.status().is_success() {
+        //     let content = match rt.block_on(response.text()) {
+        //         Ok(v) => v,
+        //         Err(_) => {
+        //             println!("Unable to get the content of {}", req_url);
+        //             return;
+        //         }
+        //     };
+        //     println!("SGX-Root-CA-Crl: {:?}", content);
+        // }
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.3 Section Get TCB Info
         let req_url = format!(
             "{}/sgx/certification/{}/tcb?fmspc={}",
@@ -611,7 +673,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
                 return;
             }
         };
-        if response.status().is_success() {
+        let tcb_info_str = if response.status().is_success() {
             let headers = response.headers();
             // v3
             if let Some(cert) = headers.get("SGX-TCB-Info-Issuer-Chain") {
@@ -628,8 +690,12 @@ pub fn tdx_ql_get_quote_verification_collateral(
                     return;
                 }
             };
-            println!("TCB-Info: {:?}", content);
-        }
+            println!("TCB-Info: {}", content);
+            content
+        } else {
+            println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+            return;
+        };
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.6 Section Get TD QE Identity
         let req_url = format!(
             "{}/tdx/certification/{}/qe/identity",
@@ -649,18 +715,39 @@ pub fn tdx_ql_get_quote_verification_collateral(
         };
         if response.status().is_success() {
             let headers = response.headers();
-            if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                println!("SGX-Enclave-Identity-Issuer-Chain: {:?}", cert);
-            }
-            let content = match rt.block_on(response.text()) {
+            let enclave_identity_issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                cert.to_str().unwrap().to_string()
+            } else {
+                println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
+                return;
+            };
+            let enclave_identity_issuer_chains_str = urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
+            let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
+            let qe_identity_str = match rt.block_on(response.text()) {
                 Ok(v) => v,
                 Err(_) => {
                     println!("Unable to get the content of {}", req_url);
                     return;
                 }
             };
-            println!("TDX-QE-Identity: {:?}", content);
-        }
+            println!("SGX-Enclave-Identity-Issuer-Chain: {}", enclave_identity_issuer_chains_str);
+            println!("TDX-QE-Identity: {}", qe_identity_str);
+            update_verification_collateral(
+                &private_key,
+                chain_id,
+                None,
+                pck_id,
+                pck_crl.as_str(),
+                tcb_info_str.as_str(),
+                enclave_id,
+                collateral_version.clone(),
+                qe_identity_str.as_str(),
+                enclave_identity_issuer_chains_str.as_str(),
+            );
+        } else {
+            println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+            return;
+        };
     }
 }
 
@@ -757,17 +844,32 @@ pub fn sgx_ql_get_qve_identity(
         };
         if response.status().is_success() {
             let headers = response.headers();
-            if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                println!("SGX-Enclave-Identity-Issuer-Chain: {:?}", cert);
-            }
-            let content = match rt.block_on(response.text()) {
+            let issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                cert.to_str().unwrap().to_string()
+            } else {
+                println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
+                return;
+            };
+            let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
+            let issuer_chains_str = issuer_chains_str.to_string();
+            let qve_identity_str = match rt.block_on(response.text()) {
                 Ok(v) => v,
                 Err(_) => {
                     println!("Unable to get the content of {}", req_url);
                     return;
                 }
             };
-            println!("SGX-QvE-Identity: {:?}", content);
+            println!("SGX-Enclave-Identity-Issuer-Chain: {}", issuer_chains_str);
+            println!("SGX-QvE-Identity: {}", qve_identity_str);
+
+            upsert_enclave_identity(
+                &private_key,
+                chain_id,
+                EnclaveID::QVE,
+                collateral_version.clone(),
+                &qve_identity_str,
+                &issuer_chains_str,
+            );
         }
     }
 }
