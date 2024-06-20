@@ -46,8 +46,8 @@ struct Opt {
     #[structopt(
         short = "c",
         long = "chain_id",
-        default_value = "59140",
-        help = "Default: Linea Goerli Testnet(Verax Attestation Registry)"
+        default_value = "1398243",
+        help = "Default: Automata Testnet"
     )]
     chain_id: u64,
 }
