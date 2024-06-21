@@ -19,6 +19,7 @@ fn get_intel_pcs_subscription_key() -> String {
 
 pub fn sgx_ql_get_quote_config(
     private_key: String,
+    rpc_url: String,
     chain_id: u64,
     pck_cert_id: SgxQlPckCertId,
     data_source: DataSource,
@@ -90,6 +91,7 @@ pub fn sgx_ql_get_quote_config(
         let cert_data = std::str::from_utf8(cert_data).unwrap();
         upsert_pck_cert(
             &private_key,
+            rpc_url,
             chain_id,
             CAID::Platform,
             qe_id_str,
@@ -166,6 +168,7 @@ pub fn sgx_ql_get_quote_config(
 
 pub fn sgx_ql_get_quote_verification_collateral(
     private_key: String,
+    rpc_url: String,
     chain_id: u64,
     fmspc: String,
     pck_ca: String,
@@ -279,6 +282,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
         );
         update_verification_collateral(
             &private_key,
+            rpc_url.clone(),
             chain_id,
             Some(root_ca_crl),
             pck_id,
@@ -441,6 +445,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
 
             update_verification_collateral(
                 &private_key,
+                rpc_url,
                 chain_id,
                 None,
                 pck_id,
@@ -460,6 +465,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
 
 pub fn tdx_ql_get_quote_verification_collateral(
     private_key: String,
+    rpc_url: String,
     chain_id: u64,
     fmspc: String,
     pck_ca: String,
@@ -573,6 +579,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
         );
         update_verification_collateral(
             &private_key,
+            rpc_url.clone(),
             chain_id,
             Some(root_ca_crl),
             pck_id,
@@ -734,6 +741,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
             println!("TDX-QE-Identity: {}", qe_identity_str);
             update_verification_collateral(
                 &private_key,
+                rpc_url,
                 chain_id,
                 None,
                 pck_id,
@@ -753,6 +761,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
 
 pub fn sgx_ql_get_qve_identity(
     private_key: String,
+    rpc_url: String,
     chain_id: u64,
     data_source: DataSource,
     collateral_version: String,
@@ -814,6 +823,7 @@ pub fn sgx_ql_get_qve_identity(
             };
         upsert_enclave_identity(
             &private_key,
+            rpc_url.clone(),
             chain_id,
             EnclaveID::QVE,
             collateral_version.clone(),
@@ -864,6 +874,7 @@ pub fn sgx_ql_get_qve_identity(
 
             upsert_enclave_identity(
                 &private_key,
+                rpc_url,
                 chain_id,
                 EnclaveID::QVE,
                 collateral_version.clone(),
@@ -876,6 +887,7 @@ pub fn sgx_ql_get_qve_identity(
 
 pub fn sgx_ql_get_root_ca_crl(
     private_key: String,
+    rpc_url: String,
     chain_id: u64,
     data_source: DataSource,
     collateral_version: String,
@@ -907,7 +919,7 @@ pub fn sgx_ql_get_root_ca_crl(
             println!("Unable to convert root_ca_crl");
             return;
         };
-        upsert_root_ca_crl(&private_key, chain_id, &crl);
+        upsert_root_ca_crl(&private_key, rpc_url, chain_id, &crl);
 
         let ret = azure::az_dcap_sgx_ql_free_root_ca_crl(root_ca_crl);
         println!("azure dcap sgx_ql_free_root_ca_crl func: {:?}", ret);
