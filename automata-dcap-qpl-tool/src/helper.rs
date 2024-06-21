@@ -334,7 +334,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
             return;
         };
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.7 Section Get Root CA CRL
-        // This API endpoint is deprecated, cannot find it in https://api.portal.trustedservices.intel.com/content/documentation.html
+        // This API endpoint is not found in Intel PCS: https://api.portal.trustedservices.intel.com/content/documentation.html
         // let req_url = format!(
         //     "{}/sgx/certification/{}/rootcacrl",
         //     pccs_url,
@@ -628,7 +628,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
             return;
         };
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.7 Section Get Root CA CRL
-        // This API endpoint is deprecated, cannot find it in https://api.portal.trustedservices.intel.com/content/documentation.html
+        // This API endpoint is not found in Intel PCS: https://api.portal.trustedservices.intel.com/content/documentation.html
         // let req_url = format!(
         //     "{}/sgx/certification/{}/rootcacrl",
         //     pccs_url,
@@ -657,7 +657,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
         // }
         // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.3 Section Get TCB Info
         let req_url = format!(
-            "{}/sgx/certification/{}/tcb?fmspc={}",
+            "{}/tdx/certification/{}/tcb?fmspc={}",
             pccs_url,
             collateral_version.clone(),
             hex::encode(fmspc.as_bytes())

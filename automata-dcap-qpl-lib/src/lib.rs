@@ -839,7 +839,7 @@ fn get_intel_pcs_subscription_key() -> Result<String, Quote3Error> {
                 return Err(Quote3Error::SgxQlErrorUnexpected);
             }
             Ok(v)
-        },
+        }
         Err(_) => {
             println!("[Auotmata DCAP QPL] pleause configure the intel pcs subscription key");
             Err(Quote3Error::SgxQlErrorUnexpected)
@@ -867,7 +867,10 @@ fn az_dcap_call_sgx_ql_get_quote_config(
                 println!(
                     "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
                 );
-                return (intel_pcs_call_sgx_ql_get_quote_config(p_pck_cert_id, pp_quote_config), false);
+                return (
+                    intel_pcs_call_sgx_ql_get_quote_config(p_pck_cert_id, pp_quote_config),
+                    false,
+                );
             }
         };
         let func: Symbol<
@@ -908,8 +911,15 @@ fn az_dcap_call_sgx_ql_get_qve_identity(
                 println!(
                     "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
                 );
-                // TODO fallback
-                return (Quote3Error::SgxQlErrorUnexpected, false);
+                return (
+                    intel_pcs_call_sgx_ql_get_qve_identity(
+                        pp_qve_identity,
+                        p_qve_identity_size,
+                        pp_qve_identity_issuer_chain,
+                        p_qve_identity_issuer_chain_size,
+                    ),
+                    false,
+                );
             }
         };
         let func: Symbol<
@@ -972,8 +982,16 @@ fn az_dcap_call_get_quote_verification_collateral(
                 println!(
                     "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
                 );
-                // TODO fallback
-                return (Quote3Error::SgxQlErrorUnexpected, false);
+                return (
+                    intel_pcs_get_quote_verification_collateral(
+                        sgx_prod_type,
+                        fmspc,
+                        fmspc_size,
+                        pck_ca,
+                        pp_quote_collateral,
+                    ),
+                    false,
+                );
             }
         };
         let func: Symbol<
@@ -1022,10 +1040,11 @@ fn az_dcap_call_sgx_ql_get_root_ca_crl(
         let lib = match Library::new(AZURE_DCAP_CLIENT_SO) {
             Ok(l) => l,
             Err(_) => {
-                println!(
-                    "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
-                );
-                // TODO fallback
+                // Cannot fallback to Intel PCS coz there is no such API
+                // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
+                // println!(
+                //     "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
+                // );
                 return (Quote3Error::SgxQlErrorUnexpected, false);
             }
         };
@@ -1113,8 +1132,12 @@ fn fallback_to_az_dcap_call_sgx_ql_get_qve_identity(
             s.to_string()
         } else {
             println!("[Automata DCAP QPL] Unable to convert qve_identity, fallback to Intel PCS");
-            // TODO fallback
-            return Quote3Error::SgxQlErrorUnexpected;
+            return intel_pcs_call_sgx_ql_get_qve_identity(
+                pp_qve_identity,
+                p_qve_identity_size,
+                pp_qve_identity_issuer_chain,
+                p_qve_identity_issuer_chain_size,
+            );
         };
 
         let qve_identity_issuer_chain = *pp_az_qve_identity_issuer_chain;
@@ -1129,8 +1152,12 @@ fn fallback_to_az_dcap_call_sgx_ql_get_qve_identity(
             s.to_string()
         } else {
             println!("[Automata DCAP QPL] Unable to convert qve_identity_issuer_chain, fallback to Intel PCS");
-            // TODO fallback
-            return Quote3Error::SgxQlErrorUnexpected;
+            return intel_pcs_call_sgx_ql_get_qve_identity(
+                pp_qve_identity,
+                p_qve_identity_size,
+                pp_qve_identity_issuer_chain,
+                p_qve_identity_issuer_chain_size,
+            );
         };
 
         let qve_identity_c_str = CString::new(qve_identity_str).unwrap();
@@ -1268,8 +1295,9 @@ fn fallback_to_az_dcap_call_sgx_ql_get_root_ca_crl(
         let root_ca_crl_str = if let Ok(s) = root_ca_crl_c_str.map(|c| c.to_string_lossy()) {
             s.to_string()
         } else {
-            println!("[Automata DCAP QPL] Unable to convert root_ca_crl, fallback to Intel PCS");
-            // TODO fallback
+            // Cannot fallback to Intel PCS coz there is no such API
+            // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
+            // println!("[Automata DCAP QPL] Unable to convert root_ca_crl, fallback to Intel PCS");
             return Quote3Error::SgxQlErrorUnexpected;
         };
         let root_ca_crl_c_str = CString::new(root_ca_crl_str).unwrap();
@@ -1312,20 +1340,25 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
     let client = reqwest::Client::new();
     let query_params = vec![
         ("cpusvn".to_string(), hex::encode(cpu_svn.cpu_svn)),
-        ("pcesvn".to_string(), hex::encode(pce_svn.isv_svn.to_le_bytes())),
-        ("pceid".to_string(), hex::encode(pck_cert_id.pce_id.to_le_bytes())),
-        ("encrypted_ppid".to_string(), encrypted_ppid)
+        (
+            "pcesvn".to_string(),
+            hex::encode(pce_svn.isv_svn.to_le_bytes()),
+        ),
+        (
+            "pceid".to_string(),
+            hex::encode(pck_cert_id.pce_id.to_le_bytes()),
+        ),
+        ("encrypted_ppid".to_string(), encrypted_ppid),
     ];
-    let mut req_builder = client
-        .get(req_url.clone())
-        .query(&query_params);
+    let mut req_builder = client.get(req_url.clone()).query(&query_params);
     if collateral_version == "v3" {
         let intel_pcs_subscription_key = match get_intel_pcs_subscription_key() {
             Ok(v) => v,
-            Err(_) => return Quote3Error::SgxQlErrorUnexpected
+            Err(_) => return Quote3Error::SgxQlErrorUnexpected,
         };
         let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
-        req_builder = req_builder.header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str);
+        req_builder =
+            req_builder.header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str);
     }
     let response = match rt.block_on(req_builder.send()) {
         Ok(v) => v,
@@ -1337,7 +1370,10 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
     if response.status().is_success() {
         let headers = response.headers();
         let issuer_chain = if let Some(cert) = headers.get("SGX-PCK-Certificate-Issuer-Chain") {
-            println!("[Automata DCAP QPL] Intel PCS gets SGX-PCK-Certificate-Issuer-Chain: {:?}", cert);
+            println!(
+                "[Automata DCAP QPL] Intel PCS gets SGX-PCK-Certificate-Issuer-Chain: {:?}",
+                cert
+            );
             cert.to_str().unwrap().to_string()
         } else {
             println!("[Automata DCAP QPL] unable to get SGX-PCK-Certificate-Issuer-Chain");
@@ -1353,11 +1389,17 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
         let leaf_cert = match rt.block_on(response.text()) {
             Ok(v) => v,
             Err(_) => {
-                println!("[Automata DCAP QPL] unable to get the content of {}", req_url);
+                println!(
+                    "[Automata DCAP QPL] unable to get the content of {}",
+                    req_url
+                );
                 return Quote3Error::SgxQlErrorUnexpected;
             }
         };
-        println!("[Automata DCAP QPL] Intel PCS gets SGX-PCK-Cert: {:?}", leaf_cert);
+        println!(
+            "[Automata DCAP QPL] Intel PCS gets SGX-PCK-Cert: {:?}",
+            leaf_cert
+        );
 
         let tcbm = hex::decode(tcbm.trim_start_matches("0x")).unwrap();
         assert!(tcbm.len() == 18);
@@ -1408,4 +1450,296 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
         return Quote3Error::SgxQlErrorUnexpected;
     }
     return Quote3Error::SgxQlSuccess;
+}
+
+// Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
+fn intel_pcs_call_sgx_ql_get_qve_identity(
+    pp_qve_identity: *mut *mut c_char,
+    p_qve_identity_size: *mut u32,
+    pp_qve_identity_issuer_chain: *mut *mut c_char,
+    p_qve_identity_issuer_chain_size: *mut u32,
+) -> Quote3Error {
+    let collateral_version = format!("v{}", get_collateral_version());
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/sgx/certification/{}/qve/identity",
+        collateral_version.clone(),
+    );
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[Automata DCAP QPL] unable to get {}", req_url);
+            return Quote3Error::SgxQlErrorUnexpected;
+        }
+    };
+    if response.status().is_success() {
+        let headers = response.headers();
+        let issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain")
+        {
+            cert.to_str().unwrap().to_string()
+        } else {
+            println!(
+                "[Automata DCAP QPL] cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}",
+                req_url
+            );
+            return Quote3Error::SgxQlErrorUnexpected;
+        };
+        let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
+        let issuer_chains_str = issuer_chains_str.to_string();
+        let qve_identity_str = match rt.block_on(response.text()) {
+            Ok(v) => v,
+            Err(_) => {
+                println!(
+                    "[Automata DCAP QPL] unable to get the content of {}",
+                    req_url
+                );
+                return Quote3Error::SgxQlErrorUnexpected;
+            }
+        };
+        println!(
+            "[Automata DCAP QPL] SGX-Enclave-Identity-Issuer-Chain: {}",
+            issuer_chains_str
+        );
+        println!("[Automata DCAP QPL] SGX-QvE-Identity: {}", qve_identity_str);
+
+        let qve_identity_c_str = CString::new(qve_identity_str).unwrap();
+        let qve_identity_len = qve_identity_c_str.as_bytes_with_nul().len();
+        let qve_identity_issuer_chain_c_str = CString::new(issuer_chains_str).unwrap();
+        let qve_identity_issuer_chain_len =
+            qve_identity_issuer_chain_c_str.as_bytes_with_nul().len();
+        unsafe {
+            *p_qve_identity_size = qve_identity_len as u32;
+            *p_qve_identity_issuer_chain_size = qve_identity_issuer_chain_len as u32;
+            *pp_qve_identity = qve_identity_c_str.into_raw();
+            *pp_qve_identity_issuer_chain = qve_identity_issuer_chain_c_str.into_raw();
+        }
+
+        return Quote3Error::SgxQlSuccess;
+    } else {
+        println!(
+            "[Automata DCAP QPL] {} returns {:?}",
+            req_url,
+            response.status()
+        );
+        return Quote3Error::SgxQlErrorUnexpected;
+    }
+}
+
+// Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
+fn intel_pcs_get_quote_verification_collateral(
+    sgx_prod_type: SgxProdType,
+    fmspc: *const u8,
+    fmspc_size: u16,
+    pck_ca: *const c_char,
+    pp_quote_collateral: *mut *mut SgxQlQveCollateral,
+) -> Quote3Error {
+    let collateral_version = format!("v{}", get_collateral_version());
+    let pck_ca_cstr = unsafe { CStr::from_ptr(pck_ca) };
+    let pck_ca_string: String = pck_ca_cstr.to_string_lossy().into_owned();
+    let fmspc_u8_vec = unsafe { std::slice::from_raw_parts(fmspc, fmspc_size as usize) };
+    let fmspc_string = String::from_utf8_lossy(fmspc_u8_vec).into_owned();
+
+    // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.2 Section Get PCK Cert CRL
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/sgx/certification/{}/pckcrl?ca={}",
+        collateral_version.clone(),
+        pck_ca_string.clone()
+    );
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[Automata DCAP QPL] unable to get {}", req_url);
+            return Quote3Error::SgxQlErrorUnexpected;
+        }
+    };
+    let (pck_crl_issuer_chain, pck_crl) = if response.status().is_success() {
+        let headers = response.headers();
+        let issuer_chains_str = if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
+            println!("[Automata DCAP QPL] SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
+            cert.to_str().unwrap().to_string()
+        } else {
+            println!(
+                "[Automata DCAP QPL] unable to get SGX-PCK-CRL-Issuer-Chain, req_url = {}",
+                req_url
+            );
+            return Quote3Error::SgxQlErrorUnexpected;
+        };
+        let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
+        let issuer_chains_str = issuer_chains_str.to_string();
+        let content = match rt.block_on(response.text()) {
+            Ok(v) => v,
+            Err(_) => {
+                println!(
+                    "[Automata DCAP QPL] unable to get the content of {}",
+                    req_url
+                );
+                return Quote3Error::SgxQlErrorUnexpected;
+            }
+        };
+        println!("[Automata DCAP QPL] SGX-PCK-CRL: {}", content);
+        (issuer_chains_str, content)
+    } else {
+        println!(
+            "[Automata DCAP QPL][ERROR] {} returns {:?}",
+            req_url,
+            response.status()
+        );
+        return Quote3Error::SgxQlErrorUnexpected;
+    };
+    // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.3 Section Get TCB Info
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/tdx/certification/{}/tcb?fmspc={}",
+        collateral_version.clone(),
+        hex::encode(fmspc_string.as_bytes())
+    );
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[Automata DCAP QPL] unable to get {}", req_url);
+            return Quote3Error::SgxQlErrorUnexpected;
+        }
+    };
+    let (tcb_info_issuer_chain, tcb_info) = if response.status().is_success() {
+        let headers = response.headers();
+        let issuer_chains_str = if let Some(cert) = headers.get("SGX-TCB-Info-Issuer-Chain") {
+            // v3
+            println!("[Automata DCAP QPL] SGX-TCB-Info-Issuer-Chain: {:?}", cert);
+            cert.to_str().unwrap().to_string()
+        } else if let Some(cert) = headers.get("TCB-Info-Issuer-Chain") {
+            // v4
+            println!("[Automata DCAP QPL] TCB-Info-Issuer-Chain: {:?}", cert);
+            cert.to_str().unwrap().to_string()
+        } else {
+            println!(
+                "[Automata DCAP QPL] unable to get issuer chain when GET req_url = {}",
+                req_url
+            );
+            return Quote3Error::SgxQlErrorUnexpected;
+        };
+        let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
+        let issuer_chains_str = issuer_chains_str.to_string();
+        let content = match rt.block_on(response.text()) {
+            Ok(v) => v,
+            Err(_) => {
+                println!(
+                    "[Automata DCAP QPL] unable to get the content of {}",
+                    req_url
+                );
+                return Quote3Error::SgxQlErrorUnexpected;
+            }
+        };
+        println!("[Automata DCAP QPL] TCB-Info: {}", content);
+        (issuer_chains_str, content)
+    } else {
+        println!(
+            "[Automata DCAP QPL] [ERROR] {} returns {:?}",
+            req_url,
+            response.status()
+        );
+        return Quote3Error::SgxQlErrorUnexpected;
+    };
+    // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.6 Section Get TD QE Identity
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/tdx/certification/{}/qe/identity",
+        collateral_version.clone()
+    );
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let response = match rt.block_on(reqwest::get(req_url.clone())) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[Automata DCAP QPL] unable to get {}", req_url);
+            return Quote3Error::SgxQlErrorUnexpected;
+        }
+    };
+    if response.status().is_success() {
+        let headers = response.headers();
+        let enclave_identity_issuer_chains_str =
+            if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                cert.to_str().unwrap().to_string()
+            } else {
+                println!(
+                    "[Automata DCAP QPL] cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}",
+                    req_url
+                );
+                return Quote3Error::SgxQlErrorUnexpected;
+            };
+        let enclave_identity_issuer_chains_str =
+            urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
+        let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
+        let qe_identity_str = match rt.block_on(response.text()) {
+            Ok(v) => v,
+            Err(_) => {
+                println!(
+                    "[Automata DCAP QPL] unable to get the content of {}",
+                    req_url
+                );
+                return Quote3Error::SgxQlErrorUnexpected;
+            }
+        };
+        println!(
+            "[Automata DCAP QPL] SGX-Enclave-Identity-Issuer-Chain: {}",
+            enclave_identity_issuer_chains_str
+        );
+        println!("[Automata DCAP QPL] TDX-QE-Identity: {}", qe_identity_str);
+
+        let (version, tee_type) = if sgx_prod_type == SgxProdType::SgxProdTypeTdx {
+            let v = SgxQlQveCollateralVersions {
+                major_version: 4,
+                minor_version: 0,
+            };
+            (SgxQlQveCollateralVersion { versions: v }, 0x81)
+        } else {
+            (SgxQlQveCollateralVersion { version: 1 }, 0x0)
+        };
+        let root_ca_crl_c_str = CString::new("").unwrap();
+        let pck_crl_c_str = CString::new(pck_crl).unwrap();
+        let pck_crl_issuer_chain_c_str = CString::new(pck_crl_issuer_chain).unwrap();
+        let tcb_info_c_str = CString::new(tcb_info).unwrap();
+        let tcb_info_issuer_chain_c_str = CString::new(tcb_info_issuer_chain).unwrap();
+        let qe_identity_issuer_chain_c_str =
+            CString::new(enclave_identity_issuer_chains_str).unwrap();
+        let qe_identity_c_str = CString::new(qe_identity_str).unwrap();
+        let quote_collateral = SgxQlQveCollateral::new(
+            version,
+            tee_type,
+            pck_crl_issuer_chain_c_str,
+            root_ca_crl_c_str,
+            pck_crl_c_str,
+            tcb_info_issuer_chain_c_str,
+            tcb_info_c_str,
+            qe_identity_issuer_chain_c_str,
+            qe_identity_c_str,
+        );
+        unsafe {
+            *pp_quote_collateral = Box::into_raw(Box::new(quote_collateral));
+        }
+        let quote_collateral = unsafe { *pp_quote_collateral };
+        println!(
+            "[Automata DCAP QPL] quote_collateral: {:?}",
+            quote_collateral
+        );
+
+        return Quote3Error::SgxQlSuccess;
+    } else {
+        println!(
+            "[Automata DCAP QPL] [ERROR] {} returns {:?}",
+            req_url,
+            response.status()
+        );
+        return Quote3Error::SgxQlErrorUnexpected;
+    };
 }
