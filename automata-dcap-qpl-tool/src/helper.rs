@@ -176,9 +176,6 @@ pub fn sgx_ql_get_quote_verification_collateral(
     collateral_version: String,
     pccs_url: String,
 ) {
-    println!("fmspc: {:?}", fmspc);
-    println!("pck_ca: {:?}", pck_ca);
-
     let pck_id = if pck_ca == "platform" {
         CAID::Platform
     } else {
@@ -188,8 +185,9 @@ pub fn sgx_ql_get_quote_verification_collateral(
 
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
-        let fmspc_slices = fmspc.as_bytes();
+        let fmspc_slices = hex::decode(fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
         let fmspc_size = fmspc_slices.len() as u16;
+        println!("fmspc_slices: {:?}, fmspc_size: {:?}", fmspc_slices, fmspc_size);
         let fmspc_pointer = fmspc_slices.as_ptr();
         let pck_ca_c_string = CString::new(pck_ca.clone()).expect("CString conversion failed");
         let pck_ca_pointer = pck_ca_c_string.as_ptr();
@@ -370,8 +368,9 @@ pub fn sgx_ql_get_quote_verification_collateral(
             "{}/sgx/certification/{}/tcb?fmspc={}",
             pccs_url,
             collateral_version.clone(),
-            hex::encode(fmspc.as_bytes())
+            fmspc
         );
+        println!("req_url: {:?}", req_url);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -473,9 +472,6 @@ pub fn tdx_ql_get_quote_verification_collateral(
     collateral_version: String,
     pccs_url: String,
 ) {
-    println!("fmspc: {:?}", fmspc);
-    println!("pck_ca: {:?}", pck_ca);
-
     let pck_id = if pck_ca == "platform" {
         CAID::Platform
     } else {
@@ -485,8 +481,9 @@ pub fn tdx_ql_get_quote_verification_collateral(
 
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
-        let fmspc_slices = fmspc.as_bytes();
+        let fmspc_slices = hex::decode(fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
         let fmspc_size = fmspc_slices.len() as u16;
+        println!("fmspc_slices: {:?}, fmspc_size: {:?}", fmspc_slices, fmspc_size);
         let fmspc_pointer = fmspc_slices.as_ptr();
         let pck_ca_c_string = CString::new(pck_ca.clone()).expect("CString conversion failed");
         let pck_ca_pointer = pck_ca_c_string.as_ptr();
@@ -667,8 +664,9 @@ pub fn tdx_ql_get_quote_verification_collateral(
             "{}/tdx/certification/{}/tcb?fmspc={}",
             pccs_url,
             collateral_version.clone(),
-            hex::encode(fmspc.as_bytes())
+            fmspc
         );
+        println!("req_url: {:?}", req_url);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()

@@ -46,7 +46,7 @@ struct Opt {
     #[structopt(
         short = "r",
         long = "rpc_url",
-        default_value = "https://1rpc.io/ata/testnet",
+        default_value = "https://automata-testnet.alt.technology",
         help = "Default: Automata Testnet RPC"
     )]
     rpc_url: String,
@@ -160,28 +160,30 @@ fn main() {
             opt.pccs_url,
         );
     } else if opt.func == "sgx_ql_get_quote_verification_collateral".to_string() {
-        let fmspc = hex::decode(opt.fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
-        let fmspc = String::from_utf8_lossy(&fmspc);
-        println!("fmspc: {}", fmspc);
+        let fmspc = opt.fmspc.trim_start_matches("0x").to_string();
+        // let fmspc = hex::decode(opt.fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
+        // let fmspc = String::from_utf8_lossy(&fmspc);
+        println!("fmspc: {}, pck_ca: {}", fmspc, opt.pck_ca);
         helper::sgx_ql_get_quote_verification_collateral(
             opt.private_key,
             opt.rpc_url,
             opt.chain_id,
-            fmspc.to_string(),
+            fmspc,
             opt.pck_ca,
             data_source,
             opt.version,
             opt.pccs_url,
         );
     } else if opt.func == "tdx_ql_get_quote_verification_collateral".to_string() {
-        let fmspc = hex::decode(opt.fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
-        let fmspc = String::from_utf8_lossy(&fmspc);
+        let fmspc = opt.fmspc.trim_start_matches("0x").to_string();
+        // let fmspc = hex::decode(opt.fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
+        // let fmspc = String::from_utf8_lossy(&fmspc);
         println!("fmspc: {}, pck_ca: {}", fmspc, opt.pck_ca);
         helper::tdx_ql_get_quote_verification_collateral(
             opt.private_key,
             opt.rpc_url,
             opt.chain_id,
-            fmspc.to_string(),
+            fmspc,
             opt.pck_ca,
             data_source,
             opt.version,

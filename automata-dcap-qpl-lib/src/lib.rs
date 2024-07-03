@@ -12,6 +12,7 @@ use ethers::prelude::*;
 use libloading::{Library, Symbol};
 use openssl::x509::X509;
 use std::ffi::{c_char, CStr, CString};
+use std::fmt::Write;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
@@ -586,7 +587,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
     }
     println!("[Automata DCAP QPL] pck_ca: {:?}", pck_ca_string);
     let fmspc_u8_vec = unsafe { std::slice::from_raw_parts(fmspc, fmspc_size as usize) };
-    let fmspc_string = String::from_utf8_lossy(fmspc_u8_vec).into_owned();
+    let fmspc_string = bytes_to_hex_string(fmspc_u8_vec);
     println!("[Automata DCAP QPL] fmspc: {:?}", fmspc_string);
 
     // Get PCK CRL
@@ -845,6 +846,14 @@ fn get_intel_pcs_subscription_key() -> Result<String, Quote3Error> {
             Err(Quote3Error::SgxQlErrorUnexpected)
         }
     }
+}
+
+fn bytes_to_hex_string(bytes: &[u8]) -> String {
+    let mut hex_string = String::new();
+    for &byte in bytes {
+        write!(&mut hex_string, "{:02X}", byte).unwrap();
+    }
+    hex_string
 }
 
 fn az_dcap_call_sgx_ql_get_quote_config(
@@ -1540,7 +1549,7 @@ fn intel_pcs_get_quote_verification_collateral(
     let pck_ca_cstr = unsafe { CStr::from_ptr(pck_ca) };
     let pck_ca_string: String = pck_ca_cstr.to_string_lossy().into_owned();
     let fmspc_u8_vec = unsafe { std::slice::from_raw_parts(fmspc, fmspc_size as usize) };
-    let fmspc_string = String::from_utf8_lossy(fmspc_u8_vec).into_owned();
+    let fmspc_string = bytes_to_hex_string(fmspc_u8_vec);
 
     // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.2 Section Get PCK Cert CRL
     let req_url = format!(
