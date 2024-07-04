@@ -837,13 +837,13 @@ fn get_intel_pcs_subscription_key() -> Result<String, Quote3Error> {
         Ok(v) => {
             if v.is_empty() {
                 println!("[Auotmata DCAP QPL] pleause configure the intel pcs subscription key");
-                return Err(Quote3Error::SgxQlErrorUnexpected);
+                return Err(Quote3Error::SgxQlErrorPlatformLibUnavailable);
             }
             Ok(v)
         }
         Err(_) => {
             println!("[Auotmata DCAP QPL] pleause configure the intel pcs subscription key");
-            Err(Quote3Error::SgxQlErrorUnexpected)
+            Err(Quote3Error::SgxQlErrorPlatformLibUnavailable)
         }
     }
 }
@@ -884,7 +884,15 @@ fn az_dcap_call_sgx_ql_get_quote_config(
         };
         let func: Symbol<
             unsafe extern "C" fn(*const SgxQlPckCertId, *mut *mut SgxQlConfig) -> Quote3Error,
-        > = lib.get(b"sgx_ql_get_quote_config").unwrap();
+        > = match lib.get(b"sgx_ql_get_quote_config") {
+            Ok(f) => f,
+            Err(_) => {
+                return (
+                    intel_pcs_call_sgx_ql_get_quote_config(p_pck_cert_id, pp_quote_config),
+                    false,
+                );
+            }
+        };
         (func(p_pck_cert_id, pp_quote_config), true)
     }
 }
@@ -938,7 +946,20 @@ fn az_dcap_call_sgx_ql_get_qve_identity(
                 *mut *mut c_char,
                 *mut u32,
             ) -> Quote3Error,
-        > = lib.get(b"sgx_ql_get_qve_identity").unwrap();
+        > = match lib.get(b"sgx_ql_get_qve_identity") {
+            Ok(f) => f,
+            Err(_) => {
+                return (
+                    intel_pcs_call_sgx_ql_get_qve_identity(
+                        pp_qve_identity,
+                        p_qve_identity_size,
+                        pp_qve_identity_issuer_chain,
+                        p_qve_identity_issuer_chain_size,
+                    ),
+                    false,
+                );
+            }
+        };
         (
             func(
                 pp_qve_identity,
@@ -1010,7 +1031,21 @@ fn az_dcap_call_get_quote_verification_collateral(
                 *const c_char,
                 *mut *mut SgxQlQveCollateral,
             ) -> Quote3Error,
-        > = lib.get(symbol_name).unwrap();
+        > = match lib.get(symbol_name) {
+            Ok(f) => f,
+            Err(_) => {
+                return (
+                    intel_pcs_get_quote_verification_collateral(
+                        sgx_prod_type,
+                        fmspc,
+                        fmspc_size,
+                        pck_ca,
+                        pp_quote_collateral,
+                    ),
+                    false,
+                );
+            }
+        };
         (func(fmspc, fmspc_size, pck_ca, pp_quote_collateral), true)
     }
 }
@@ -1054,11 +1089,16 @@ fn az_dcap_call_sgx_ql_get_root_ca_crl(
                 // println!(
                 //     "[Automata DCAP QPL] fail to load libdcap_az_client.so, fallback to Intel PCS"
                 // );
-                return (Quote3Error::SgxQlErrorUnexpected, false);
+                return (Quote3Error::SgxQlErrorPlatformLibUnavailable, false);
             }
         };
         let func: Symbol<unsafe extern "C" fn(*mut *mut c_char, *mut u16) -> Quote3Error> =
-            lib.get(b"sgx_ql_get_root_ca_crl").unwrap();
+            match lib.get(b"sgx_ql_get_root_ca_crl") {
+                Ok(f) => f,
+                Err(_) => {
+                    return (Quote3Error::SgxQlErrorPlatformLibUnavailable, false);
+                }
+            };
         (func(pp_root_ca_crl, p_root_ca_crl_size), true)
     }
 }
@@ -1307,7 +1347,7 @@ fn fallback_to_az_dcap_call_sgx_ql_get_root_ca_crl(
             // Cannot fallback to Intel PCS coz there is no such API
             // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
             // println!("[Automata DCAP QPL] Unable to convert root_ca_crl, fallback to Intel PCS");
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         };
         let root_ca_crl_c_str = CString::new(root_ca_crl_str).unwrap();
         *pp_root_ca_crl = root_ca_crl_c_str.into_raw();
@@ -1363,7 +1403,7 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
     if collateral_version == "v3" {
         let intel_pcs_subscription_key = match get_intel_pcs_subscription_key() {
             Ok(v) => v,
-            Err(_) => return Quote3Error::SgxQlErrorUnexpected,
+            Err(_) => return Quote3Error::SgxQlErrorPlatformLibUnavailable,
         };
         let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
         req_builder =
@@ -1373,7 +1413,7 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
         Ok(v) => v,
         Err(_) => {
             println!("[Automata DCAP QPL] unable to get {}", req_url);
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         }
     };
     if response.status().is_success() {
@@ -1386,14 +1426,14 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
             cert.to_str().unwrap().to_string()
         } else {
             println!("[Automata DCAP QPL] unable to get SGX-PCK-Certificate-Issuer-Chain");
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         };
         let tcbm = if let Some(tcbm) = headers.get("SGX-TCBm") {
             println!("[Automata DCAP QPL] Intel PCS gets tcbm: {:?}", tcbm);
             tcbm.to_str().unwrap().to_string()
         } else {
             println!("[Automata DCAP QPL] unable to get tcbm");
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         };
         let leaf_cert = match rt.block_on(response.text()) {
             Ok(v) => v,
@@ -1402,7 +1442,7 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
                     "[Automata DCAP QPL] unable to get the content of {}",
                     req_url
                 );
-                return Quote3Error::SgxQlErrorUnexpected;
+                return Quote3Error::SgxQlErrorPlatformLibUnavailable;
             }
         };
         println!(
@@ -1456,7 +1496,7 @@ fn intel_pcs_call_sgx_ql_get_quote_config(
         );
     } else {
         println!("[Automata DCAP QPL] unable to get pck cert from intel pcs: {}, response.status() = {:?}", req_url, response.status());
-        return Quote3Error::SgxQlErrorUnexpected;
+        return Quote3Error::SgxQlErrorPlatformLibUnavailable;
     }
     return Quote3Error::SgxQlSuccess;
 }
@@ -1481,7 +1521,7 @@ fn intel_pcs_call_sgx_ql_get_qve_identity(
         Ok(v) => v,
         Err(_) => {
             println!("[Automata DCAP QPL] unable to get {}", req_url);
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         }
     };
     if response.status().is_success() {
@@ -1494,7 +1534,7 @@ fn intel_pcs_call_sgx_ql_get_qve_identity(
                 "[Automata DCAP QPL] cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}",
                 req_url
             );
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         };
         let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
         let issuer_chains_str = issuer_chains_str.to_string();
@@ -1505,7 +1545,7 @@ fn intel_pcs_call_sgx_ql_get_qve_identity(
                     "[Automata DCAP QPL] unable to get the content of {}",
                     req_url
                 );
-                return Quote3Error::SgxQlErrorUnexpected;
+                return Quote3Error::SgxQlErrorPlatformLibUnavailable;
             }
         };
         println!(
@@ -1533,7 +1573,7 @@ fn intel_pcs_call_sgx_ql_get_qve_identity(
             req_url,
             response.status()
         );
-        return Quote3Error::SgxQlErrorUnexpected;
+        return Quote3Error::SgxQlErrorPlatformLibUnavailable;
     }
 }
 
@@ -1565,7 +1605,7 @@ fn intel_pcs_get_quote_verification_collateral(
         Ok(v) => v,
         Err(_) => {
             println!("[Automata DCAP QPL] unable to get {}", req_url);
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         }
     };
     let (pck_crl_issuer_chain, pck_crl) = if response.status().is_success() {
@@ -1578,7 +1618,7 @@ fn intel_pcs_get_quote_verification_collateral(
                 "[Automata DCAP QPL] unable to get SGX-PCK-CRL-Issuer-Chain, req_url = {}",
                 req_url
             );
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         };
         let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
         let issuer_chains_str = issuer_chains_str.to_string();
@@ -1589,7 +1629,7 @@ fn intel_pcs_get_quote_verification_collateral(
                     "[Automata DCAP QPL] unable to get the content of {}",
                     req_url
                 );
-                return Quote3Error::SgxQlErrorUnexpected;
+                return Quote3Error::SgxQlErrorPlatformLibUnavailable;
             }
         };
         println!("[Automata DCAP QPL] SGX-PCK-CRL: {}", content);
@@ -1600,7 +1640,7 @@ fn intel_pcs_get_quote_verification_collateral(
             req_url,
             response.status()
         );
-        return Quote3Error::SgxQlErrorUnexpected;
+        return Quote3Error::SgxQlErrorPlatformLibUnavailable;
     };
     // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.3 Section Get TCB Info
     let req_url = format!(
@@ -1616,7 +1656,7 @@ fn intel_pcs_get_quote_verification_collateral(
         Ok(v) => v,
         Err(_) => {
             println!("[Automata DCAP QPL] unable to get {}", req_url);
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         }
     };
     let (tcb_info_issuer_chain, tcb_info) = if response.status().is_success() {
@@ -1634,7 +1674,7 @@ fn intel_pcs_get_quote_verification_collateral(
                 "[Automata DCAP QPL] unable to get issuer chain when GET req_url = {}",
                 req_url
             );
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         };
         let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
         let issuer_chains_str = issuer_chains_str.to_string();
@@ -1645,7 +1685,7 @@ fn intel_pcs_get_quote_verification_collateral(
                     "[Automata DCAP QPL] unable to get the content of {}",
                     req_url
                 );
-                return Quote3Error::SgxQlErrorUnexpected;
+                return Quote3Error::SgxQlErrorPlatformLibUnavailable;
             }
         };
         println!("[Automata DCAP QPL] TCB-Info: {}", content);
@@ -1656,7 +1696,7 @@ fn intel_pcs_get_quote_verification_collateral(
             req_url,
             response.status()
         );
-        return Quote3Error::SgxQlErrorUnexpected;
+        return Quote3Error::SgxQlErrorPlatformLibUnavailable;
     };
     // Ref: https://download.01.org/intel-sgx/sgx-dcap/1.19/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf || 3.6 Section Get TD QE Identity
     let req_url = format!(
@@ -1671,7 +1711,7 @@ fn intel_pcs_get_quote_verification_collateral(
         Ok(v) => v,
         Err(_) => {
             println!("[Automata DCAP QPL] unable to get {}", req_url);
-            return Quote3Error::SgxQlErrorUnexpected;
+            return Quote3Error::SgxQlErrorPlatformLibUnavailable;
         }
     };
     if response.status().is_success() {
@@ -1684,7 +1724,7 @@ fn intel_pcs_get_quote_verification_collateral(
                     "[Automata DCAP QPL] cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}",
                     req_url
                 );
-                return Quote3Error::SgxQlErrorUnexpected;
+                return Quote3Error::SgxQlErrorPlatformLibUnavailable;
             };
         let enclave_identity_issuer_chains_str =
             urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
@@ -1696,7 +1736,7 @@ fn intel_pcs_get_quote_verification_collateral(
                     "[Automata DCAP QPL] unable to get the content of {}",
                     req_url
                 );
-                return Quote3Error::SgxQlErrorUnexpected;
+                return Quote3Error::SgxQlErrorPlatformLibUnavailable;
             }
         };
         println!(
@@ -1749,6 +1789,6 @@ fn intel_pcs_get_quote_verification_collateral(
             req_url,
             response.status()
         );
-        return Quote3Error::SgxQlErrorUnexpected;
+        return Quote3Error::SgxQlErrorPlatformLibUnavailable;
     };
 }
