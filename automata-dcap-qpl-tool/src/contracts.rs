@@ -277,8 +277,13 @@ pub fn upsert_enclave_identity(
         U256::from(3u32) // use v3 as default dcap attestation version
     };
     let enclave_identity: EnclaveIdentity = serde_json::from_str(enclave_identity_str).unwrap();
+    // Jiaquan: we cannot use serde lib to deserialize the enclave_identity_str, because in v4 struct, an inner struct is also indexmap here
+    // Need to have a better implementation here
+    let enclave_identity_str = &enclave_identity_str[r#""enclaveIdentity":{"#.len()..];
+    let end_idx = enclave_identity_str.find(r#","signature""#).unwrap();
+    let enclave_identity_str = &enclave_identity_str[..end_idx];
     let enclave_identity_obj = EnclaveIdentityJsonObj {
-        identity_str: serde_json::to_string(&enclave_identity.enclave_identity).unwrap(),
+        identity_str: enclave_identity_str.to_string(),
         signature: Bytes::from_hex(&enclave_identity.signature).unwrap(),
     };
     println!("identity_str = {}", enclave_identity_obj.identity_str);
