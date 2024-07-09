@@ -619,6 +619,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
         }
     };
     let pck_crl_c_str = CString::new(pck_crl_bytes.to_string()).unwrap();
+    println!("pck_crl_c_str: {:?}", pck_crl_c_str);
     let pck_dao_address = PCK_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
     let pck_dao = PckDao::new(pck_dao_address, client.clone());
     let pck_cert_chains = match rt.block_on(pck_dao.get_pck_cert_chain(ca_id).call()) {
@@ -640,6 +641,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
         pck_cert_chains.1.to_string()
     );
     let pck_crl_issuer_chain_c_str = CString::new(pck_crl_issuer_chain_str).unwrap();
+    println!("pck_crl_issuer_chain_c_str: {:?}", pck_crl_issuer_chain_c_str);
 
     // Get Root CA CRL
     let ca_id = CAID::Root as u8;
@@ -657,6 +659,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
         }
     };
     let root_ca_crl_c_str = CString::new(root_ca_crl_bytes.to_string()).unwrap();
+    println!("root_ca_crl_c_str: {:?}", root_ca_crl_c_str);
 
     // Get Tcb Info & Issuer Chain
     // Input: sgx_prod_type, fmspc_string
@@ -665,23 +668,34 @@ fn sgx_ql_fetch_quote_verification_collateral(
         .parse::<Address>()
         .unwrap();
     let fmspc_tcb_dao = FmspcTcbDao::new(fmspc_tcb_dao_address, client.clone());
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    // let rt = tokio::runtime::Builder::new_current_thread()
+    //     .enable_all()
+    //     .build()
+    //     .unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
     let tcb_type = U256::from(sgx_prod_type as u32);
     let collateral_version = get_collateral_version();
     // Currently APIv3 returns TCBInfoV2, APIv4 returns TCBInfoV3
     // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html
     let version = U256::from(collateral_version - 1);
-    let tcb_info: TcbInfoJsonObj = match rt.block_on(
+    let tcb_info: TcbInfoJsonObj = match rt.block_on(async {
+        let timeout_duration = std::time::Duration::from_secs(5);
+
+        let result = tokio::time::timeout(timeout_duration, 
         fmspc_tcb_dao
             .get_tcb_info(tcb_type, fmspc_string, version)
-            .call(),
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            println!("[Automata DCAP QPL] get_tcb_info func meets error: {:?}, fallback to Azure DCAP lib", err);
+            .call()
+        ).await;
+
+        match result {
+            Ok(Ok(value)) => Some(value),
+            Ok(Err(err)) => None,
+            Err(_) => None,
+        }
+    }) {
+        Some(v) => v,
+        None => {
+            println!("[Automata DCAP QPL] get_tcb_info func meets error, fallback to Azure DCAP lib");
             return fallback_to_az_dcap_call_get_quote_verification_collateral(
                 sgx_prod_type,
                 fmspc,
@@ -697,6 +711,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
         tcb_info.signature.to_string().trim_start_matches("0x")
     );
     let tcb_info_c_str = CString::new(tcb_info_str).unwrap();
+    println!("tcb_info_c_str: {:?}", tcb_info_c_str);
     let tcb_info_issuer_chains = match rt.block_on(fmspc_tcb_dao.get_tcb_issuer_chain().call()) {
         Ok(v) => v,
         Err(err) => {
@@ -716,6 +731,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
         tcb_info_issuer_chains.1.to_string()
     );
     let tcb_info_issuer_chain_c_str = CString::new(tcb_info_issuer_chain_str).unwrap();
+    println!("tcb_info_issuer_chain_c_str: {:?}", tcb_info_issuer_chain_c_str);
 
     // Get QE Identity & Issuer Chain
     // Input: sgx_prod_type, api_version
@@ -772,12 +788,14 @@ fn sgx_ql_fetch_quote_verification_collateral(
         qe.signature.to_string().trim_start_matches("0x")
     );
     let qe_identity_c_str = CString::new(qe_identity_str).unwrap();
+    println!("qe_identity_c_str: {:?}", qe_identity_c_str);
     let qe_identity_issuer_chain_str = format!(
         "{}{}",
         issuer_chain.0.to_string(),
         issuer_chain.1.to_string()
     );
     let qe_identity_issuer_chain_c_str = CString::new(qe_identity_issuer_chain_str).unwrap();
+    println!("qe_identity_issuer_chain_c_str: {:?}", qe_identity_issuer_chain_c_str);
 
     let (version, tee_type) = if sgx_prod_type == SgxProdType::SgxProdTypeTdx {
         let v = SgxQlQveCollateralVersions {
