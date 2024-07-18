@@ -8,34 +8,19 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
+    // basic usage
     #[structopt(
-        short = "f",
-        long = "function",
+        long = "quote_hex",
         default_value = "",
-        help = "The function needs to be operated and updated on chain, acceptable values: sgx_ql_get_quote_config, sgx_ql_get_quote_verification_collateral, tdx_ql_get_quote_verification_collateral, sgx_ql_get_qve_identity and sgx_ql_get_root_ca_crl"
+        help = "The quote that needs to check the missing collaterals"
     )]
-    func: String,
+    quote_hex: String,
     #[structopt(
-        short = "s",
-        long = "source",
-        default_value = "Azure",
-        help = "Acceptable values: Azure, Local, All. You need to specify the PCCS URL when you configure as Local"
+        long = "quote_file",
+        default_value = "",
+        help = "The quote that needs to check the missing collaterals"
     )]
-    source: String,
-    #[structopt(
-        short = "v",
-        long = "collateral_version",
-        default_value = "v3",
-        help = "Acceptable values for sgx collateral version are empty, v1, v2, v3 or v4"
-    )]
-    version: String,
-    #[structopt(
-        short = "u",
-        long = "pccs_url",
-        default_value = "https://api.trustedservices.intel.com",
-        help = "The local PCCS URL when the source is Local or All, default URL is the Intel PCS endpoint"
-    )]
-    pccs_url: String,
+    quote_file: String,
     #[structopt(
         short = "p",
         long = "private_key",
@@ -43,6 +28,13 @@ struct Opt {
         help = "Wallet's private key to perform the transaction to update the on-chain PCCS"
     )]
     private_key: String,
+    #[structopt(
+        short = "u",
+        long = "pccs_url",
+        default_value = "https://api.trustedservices.intel.com",
+        help = "The local PCCS URL when the source is Local or All, default URL is the Intel PCS endpoint"
+    )]
+    pccs_url: String,
     #[structopt(
         short = "r",
         long = "rpc_url",
@@ -57,6 +49,29 @@ struct Opt {
         help = "Default: Automata Testnet Chain ID"
     )]
     chain_id: u64,
+
+    // advanced usage
+    #[structopt(
+        short = "f",
+        long = "function",
+        default_value = "",
+        help = "The function needs to be operated and updated on chain, acceptable values: sgx_ql_get_quote_config, sgx_ql_get_quote_verification_collateral, tdx_ql_get_quote_verification_collateral, sgx_ql_get_qve_identity and sgx_ql_get_root_ca_crl"
+    )]
+    func: String,
+    #[structopt(
+        short = "s",
+        long = "source",
+        default_value = "All",
+        help = "Acceptable values: Azure, Local, All. You need to specify the PCCS URL when you configure as Local"
+    )]
+    source: String,
+    #[structopt(
+        short = "v",
+        long = "collateral_version",
+        default_value = "v3",
+        help = "Acceptable values for sgx collateral version are empty, v1, v2, v3 or v4"
+    )]
+    version: String,
     #[structopt(
         long = "qe_id",
         default_value = "", // f28dda234595e56eaeb7ce9b681a62cd
@@ -119,7 +134,25 @@ fn main() {
         return;
     }
 
-    if opt.func == "sgx_ql_get_quote_config".to_string() {
+    if !opt.quote_hex.is_empty() {
+        let quote = hex::decode(opt.quote_hex.trim_start_matches("0x")).expect("Failed to decode hex string");
+        helper::check_missing_collateral(
+            &quote,
+            &opt.private_key,
+            opt.pccs_url,
+            opt.rpc_url,
+            opt.chain_id,
+        );
+    } else if !opt.quote_file.is_empty() {
+        let quote = std::fs::read(opt.quote_file).expect("Error: Unable to open quote file");
+        helper::check_missing_collateral(
+            &quote,
+            &opt.private_key,
+            opt.pccs_url,
+            opt.rpc_url,
+            opt.chain_id,
+        );
+    } else if opt.func == "sgx_ql_get_quote_config".to_string() {
         let mut qe_id = hex::decode(opt.qe_id.trim_start_matches("0x")).expect("Failed to decode hex string");
         assert!(qe_id.len() == 16);
 

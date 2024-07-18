@@ -1,9 +1,21 @@
 use crate::cloud_providers::*;
 use crate::contracts::*;
+use crate::pccs_types::*;
 use automata_dcap_qpl_common::*;
+use automata_dcap_qpl_contracts::{
+    fmspc_tcb_dao::{FmspcTcbDao, TcbInfoJsonObj},
+    pcs_dao::PcsDao,
+    FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS,
+    PCS_DAO_PORTAL_CONTRACT_ADDRESS,
+};
+use ethers::prelude::*;
+use hex::FromHex;
+use pccs_reader_rs::*;
 
 use reqwest;
+use openssl::x509::X509Crl;
 use std::ffi::{c_char, CStr, CString};
+use std::{str::FromStr, sync::Arc};
 
 const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
 
@@ -13,6 +25,251 @@ fn get_intel_pcs_subscription_key() -> String {
         Err(_) => {
             println!("[ERROR] pleause configure the intel pcs subscription key");
             format!("")
+        }
+    }
+}
+
+pub fn check_missing_collateral(
+    quote: &[u8],
+    prv_key: &str,
+    pccs_url: String,
+    rpc_url: String,
+    chain_id: u64,
+) {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    loop {
+        let missing_collateral: MissingCollateral = rt.block_on(pccs_reader_rs::find_missing_collaterals_from_quote(quote));
+        println!("missing_collateral: {:?}", missing_collateral);
+        match missing_collateral {
+            MissingCollateral::None => break,
+            MissingCollateral::QEIdentity(enclave_id_type, quote_version) => {
+                let (enclave_id, enclave_id_type) = match enclave_id_type {
+                    pccs_reader_rs::pccs::enclave_id::EnclaveIdType::TDQE => {
+                        (EnclaveID::TD_QE, "tdx".to_string())
+                    },
+                    _ => {
+                        (EnclaveID::QE, "sgx".to_string())
+                    }
+                };
+                let collateral_version = if quote_version == 3 {
+                    "v3".to_string()
+                } else {
+                    "v4".to_string()
+                };
+                let req_url = format!(
+                    "{}/{}/certification/{}/qe/identity",
+                    pccs_url,
+                    enclave_id_type,
+                    collateral_version
+                );
+                let response = match rt.block_on(reqwest::get(req_url.clone())) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        println!("Unable to get {}", req_url);
+                        return;
+                    }
+                };
+                if response.status().is_success() {
+                    let headers = response.headers();
+                    let enclave_identity_issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                        cert.to_str().unwrap().to_string()
+                    } else {
+                        println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
+                        return;
+                    };
+                    let enclave_identity_issuer_chains_str = urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
+                    let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
+                    let qe_identity_str = match rt.block_on(response.text()) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("Unable to get the content of {}", req_url);
+                            return;
+                        }
+                    };
+                    println!("Enclave-Identity-Issuer-Chain: {}", enclave_identity_issuer_chains_str);
+                    println!("QE-Identity: {}", qe_identity_str);
+
+                    upsert_enclave_identity(
+                        prv_key,
+                        rpc_url.clone(),
+                        chain_id,
+                        enclave_id,
+                        collateral_version,
+                        qe_identity_str.as_str(),
+                        enclave_identity_issuer_chains_str.as_str(),
+                    )
+                }
+            },
+            MissingCollateral::FMSPCTCB(tcb_type, fmspc, tcb_version) => {
+                let tcb_type = if tcb_type == 1 {
+                    "tdx".to_string()
+                } else {
+                    "sgx".to_string()
+                };
+                let collateral_version = if tcb_version == 2 {
+                    "v3".to_string()
+                } else {
+                    "v4".to_string()
+                };
+                let req_url = format!(
+                    "{}/{}/certification/{}/tcb?fmspc={}",
+                    pccs_url,
+                    tcb_type,
+                    collateral_version,
+                    fmspc
+                );
+                println!("req_url: {:?}", req_url);
+                let response = match rt.block_on(reqwest::get(req_url.clone())) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        println!("Unable to get {}", req_url);
+                        return;
+                    }
+                };
+                let tcb_info_str = if response.status().is_success() {
+                    let headers = response.headers();
+                    // v3
+                    if let Some(cert) = headers.get("SGX-TCB-Info-Issuer-Chain") {
+                        println!("SGX-TCB-Info-Issuer-Chain: {:?}", cert);
+                    }
+                    // v4
+                    if let Some(cert) = headers.get("TCB-Info-Issuer-Chain") {
+                        println!("TCB-Info-Issuer-Chain: {:?}", cert);
+                    }
+                    let content = match rt.block_on(response.text()) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("Unable to get the content of {}", req_url);
+                            return;
+                        }
+                    };
+                    println!("TCB-Info: {}", content);
+                    content
+                } else {
+                    println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+                    return;
+                };
+                // TCB Info
+                let tcb_info: TcbInfo = serde_json::from_str(&tcb_info_str).unwrap();
+                let tcb_info_str = &tcb_info_str[r#""tcbInfo":{"#.len()..];
+                let end_idx = tcb_info_str.find(r#","signature""#).unwrap();
+                let tcb_info_str = &tcb_info_str[..end_idx];
+                let tcb_info_obj = TcbInfoJsonObj {
+                    tcb_info_str: tcb_info_str.to_string(),
+                    signature: Bytes::from_hex(tcb_info.signature).unwrap(),
+                };
+                println!("tcb_info_obj.tcb_info_str: {}", tcb_info_obj.tcb_info_str);
+                println!("tcb_info_obj.signature: {:?}", tcb_info_obj.signature);
+                let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+                let wallet = prv_key.parse::<LocalWallet>().unwrap();
+                let signer = Arc::new(SignerMiddleware::new(
+                    provider,
+                    wallet.with_chain_id(chain_id),
+                ));
+                let fmspc_tcb_dao_address = FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS
+                    .parse::<Address>()
+                    .unwrap();
+                let fmspc_tcb_dao = FmspcTcbDao::new(fmspc_tcb_dao_address, signer.clone());
+                match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).send()) {
+                    Ok(pending_tx) => {
+                        println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
+                        match rt.block_on(pending_tx) {
+                            Ok(receipt) => {
+                                println!("txn[upsert_fmspc_tcb] receipt: {:?}", receipt);
+                            }
+                            Err(err) => {
+                                println!("txn[upsert_fmspc_tcb] receipt meet error: {:?}", err);
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        println!("txn[upsert_fmspc_tcb] meet error: {:?}", err);
+                    }
+                }
+            },
+            MissingCollateral::PCS(pck_ca, _, _) => {
+                let (pck_ca, pck) = match pck_ca {
+                    pccs_reader_rs::pccs::pcs::IPCSDao::CA::PROCESSOR => {
+                        ("processor".to_string(), CAID::Processor)
+                    },
+                    pccs_reader_rs::pccs::pcs::IPCSDao::CA::PLATFORM => {
+                        ("platform".to_string(), CAID::Platform)
+                    },
+                    _ => {
+                        // should not happen because it's already included in the tcb/qe cert chain
+                        continue;
+                    },
+                };
+                let req_url = format!(
+                    "{}/sgx/certification/v3/pckcrl?ca={}",
+                    pccs_url,
+                    pck_ca.clone()
+                );
+                let response = match rt.block_on(reqwest::get(req_url.clone())) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        println!("Unable to get {}", req_url);
+                        return;
+                    }
+                };
+                let pck_crl = if response.status().is_success() {
+                    let headers = response.headers();
+                    if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
+                        println!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
+                    }
+                    let content = match rt.block_on(response.text()) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("Unable to get the content of {}", req_url);
+                            return;
+                        }
+                    };
+                    println!("SGX-PCK-CRL: {}", content);
+                    content
+                } else {
+                    println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+                    return;
+                };
+                let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+                let wallet = prv_key.parse::<LocalWallet>().unwrap();
+                let signer = Arc::new(SignerMiddleware::new(
+                    provider,
+                    wallet.with_chain_id(chain_id),
+                ));
+                let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
+                let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
+                // PCK CRL
+                let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {
+                    Ok(c) => hex::encode(c.to_der().unwrap()),
+                    Err(err) => {
+                        println!("Error parsing certificate: {:?}", err);
+                        return;
+                    }
+                };
+                match rt.block_on(
+                    pcs_dao
+                        .upsert_pck_crl(pck as u8, Bytes::from_str(&pck_crl).unwrap())
+                        .send(),
+                ) {
+                    Ok(pending_tx) => {
+                        println!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
+                        match rt.block_on(pending_tx) {
+                            Ok(receipt) => {
+                                println!("txn[upsert_pck_crl] receipt: {:?}", receipt);
+                            }
+                            Err(err) => {
+                                println!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        println!("txn[upsert_pck_crl] meet error: {:?}", err);
+                    }
+                }
+            }
         }
     }
 }

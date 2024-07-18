@@ -68,9 +68,9 @@ Build the tool and upload the necessary collaterals on chain to satisfy the quot
 Use `./automata-dcap-qpl-tool -h` to see the details, or edit the [code](./automata-dcap-qpl-tool/src/main.rs) to set the necessary inputs.
 
 Example:
-Upload the sgx_ql_get_quote_config necessary collaterals in quote generation.
+Use the quote to check whether there is any missing collateral on-chain, and the tool will help you to fetch and upsert it before you perform the on-chain verification.
 ```
-$ ./automata-dcap-qpl-tool -f sgx_ql_get_quote_config -s Azure -p <wallet_private_key>
+$ ./automata-dcap-qpl-tool --quote_hex <quote hex string> -p <wallet_private_key>
 ```
 See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/Intel_SGX_ECDSA_QuoteLibReference_DCAP_API.pdf).
 
