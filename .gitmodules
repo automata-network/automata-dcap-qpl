@@ -1,0 +1,3 @@
+[submodule "automata-dcap-qpl-tool/pccs-reader-rs"]
+	path = automata-dcap-qpl-tool/pccs-reader-rs
+	url = git@github.com:automata-network/pccs-reader-rs.git

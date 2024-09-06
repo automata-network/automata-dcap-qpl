@@ -1,0 +1,24 @@
+[package]
+name = "automata-dcap-qpl-tool"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+automata-dcap-qpl-common = { path = "../common" }
+automata-dcap-qpl-contracts = { path = "../contracts" }
+
+pccs-reader-rs = { path = "./pccs-reader-rs" }
+
+libloading = "0.8"
+ethers = "2.0"
+hex = "0.4"
+tokio = { version = "1", features = ["full"] }
+structopt = "0.3"
+reqwest = "0.11"
+serde = "1.0"
+serde_json = "1.0"
+openssl = "0.10"
+indexmap = {version = "2.0.0", features = ["serde"]}
+urlencoding = "2.1"
