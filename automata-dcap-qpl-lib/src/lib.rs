@@ -689,7 +689,7 @@ fn sgx_ql_fetch_quote_verification_collateral(
 
         match result {
             Ok(Ok(value)) => Some(value),
-            Ok(Err(err)) => None,
+            Ok(Err(_)) => None,
             Err(_) => None,
         }
     }) {
