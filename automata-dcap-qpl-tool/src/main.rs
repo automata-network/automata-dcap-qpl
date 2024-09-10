@@ -38,7 +38,7 @@ struct Opt {
     #[structopt(
         short = "r",
         long = "rpc_url",
-        default_value = "https://automata-testnet.alt.technology",
+        default_value = "https://rpc-testnet.ata.network",
         help = "Default: Automata Testnet RPC"
     )]
     rpc_url: String,
