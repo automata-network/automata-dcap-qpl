@@ -96,7 +96,7 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 
 ### **Automata On-chain PCCS resources**
 
-#### [Testnet](https://docs.ata.network/protocol/testnet)
+#### [Automata Testnet](https://docs.ata.network/protocol/testnet)
 | Contract | Address |
 | --- | --- |
 | DCAP_ATTESTATION | 0xefE368b17D137E86298eec8EbC5502fb56d27832 |
@@ -113,7 +113,7 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 | PCK_HELPER | 0x5213c0e3Ab478dbc83E8afFF8909717332E4f8E1 |
 | CRL_HELPER | 0x12C1E13Aa2a238EAb15c2e2b6AC670266bc3C814 |
 
-#### [Mainnet(Preview)](https://docs.ata.network/protocol/mainnet-preview)
+#### [Automata Mainnet(Preview)](https://docs.ata.network/protocol/mainnet-preview)
 
 | Contract | Address |
 | --- | --- |
@@ -130,6 +130,18 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 | FMSPC_TCB_HELPER | 0xc99bF04C31bF3d026B5B47b2574FC19C1459B732 |
 | X509_HELPER | 0x3e2fe733E444313A93Fa3f9AEd3bB203048dDE70 |
 | X509_CRL_HELPER | 0x2567245dE6E349C8B7AA82fD6FF854b844A0aEF9 |
+
+#### Ethereum Holesky Testnet
+| Contract | Address |
+| --- | --- |
+| DCAP_ATTESTATION | 0x133303659F51d75ED216FD98a0B70CbCD75339b2 |
+| PCCS_ROUTER |0xdE5e69A2ca2556fe46883d754d987703bF28Cc51 |
+| V3_VERIFIER | 0x12d7d59Ae1e4dbF83b08C82958Ac3FcEB84fB164 |
+| V4_VERIFIER | 0x3Cb24c454a29e796edF47a96dF32DD1855058258 |
+| ENCLAVE_ID_DAO | 0x9f4b0fB3A95072bD133082e9683A3536669EFE07 |
+| FMSPC_TCB_DAO | 0xaB5074445E5ae3C650553d5a7560B3A7121635B9 |
+| PCK_DAO | 0x5B2d7781E3c44966769484daBCdc435EFD281c34 |
+| PCS_DAO | 0x66FdB4E72d2F4a7e2081bf83F1FfACC9bbCb384b |
 
 ## See also
 
