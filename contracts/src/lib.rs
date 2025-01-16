@@ -2,6 +2,7 @@ pub mod enclave_identity_dao;
 pub mod fmspc_tcb_dao;
 pub mod pck_dao;
 pub mod pcs_dao;
+pub mod parse_address_from_env_var;
 
 pub const RPC_URL: &str = "https://rpc-testnet.ata.network";
 pub const ENCLAVE_IDENTITY_DAO_PORTAL_CONTRACT_ADDRESS: &str = "0x413272890ab9F155a47A5F90a404Fb51aa259087";

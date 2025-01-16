@@ -62,7 +62,9 @@ Use `./automata-dcap-qpl-tool -h` to see the details, or edit the [code](./autom
 Example:
 Use the quote to check whether there is any missing collateral on-chain, and the tool will help you to fetch and upsert it before you perform the on-chain verification.
 ```
-$ ./automata-dcap-qpl-tool --quote_hex <quote hex string> -p <wallet_private_key>
+cd automata-dcap-qpl-tool
+source env/automata_testnet
+./target/release/automata-dcap-qpl-tool --quote_hex <quote hex string> -p <wallet_private_key> --chain_id=$CHAIN_ID --rpc_url=$RPC_URL
 ```
 See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/Intel_SGX_ECDSA_QuoteLibReference_DCAP_API.pdf).
 
@@ -158,8 +160,8 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 ## Contributing
 
 **Before You Contribute**:
-* **Raise an Issue**: If you find a bug or wish to suggest a feature, please open an issue first to discuss it. Detail the bug or feature so we understand your intention.  
-* **Pull Requests (PR)**: Before submitting a PR, ensure:  
+* **Raise an Issue**: If you find a bug or wish to suggest a feature, please open an issue first to discuss it. Detail the bug or feature so we understand your intention.
+* **Pull Requests (PR)**: Before submitting a PR, ensure:
     * Your contribution successfully builds.
     * It includes tests, if applicable.
 
