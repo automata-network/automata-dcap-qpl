@@ -62,7 +62,9 @@ Use `./automata-dcap-qpl-tool -h` to see the details, or edit the [code](./autom
 Example:
 Use the quote to check whether there is any missing collateral on-chain, and the tool will help you to fetch and upsert it before you perform the on-chain verification.
 ```
-$ ./automata-dcap-qpl-tool --quote_hex <quote hex string> -p <wallet_private_key>
+cd automata-dcap-qpl-tool
+source env/automata_testnet
+./target/release/automata-dcap-qpl-tool --quote_hex <quote hex string> -p <wallet_private_key> --chain_id=$CHAIN_ID --rpc_url=$RPC_URL
 ```
 See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/Intel_SGX_ECDSA_QuoteLibReference_DCAP_API.pdf).
 
@@ -92,10 +94,10 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 | PCCS_Storage | [0xe8599DD2366230B7EfDD526985c64C7325b27569](https://explorer-testnet.ata.network/address/0xe8599DD2366230B7EfDD526985c64C7325b27569) |
 | V3_VERIFIER | [0x67042D171b8B7Da1A4a98Df787bDce79190DAc3c](https://explorer-testnet.ata.network/address/0x67042D171b8B7Da1A4a98Df787bDce79190DAc3c) |
 | V4_VERIFIER | [0x921B8F6Ec83E405B715111eC1AE8B54A3ea063EB](https://explorer-testnet.ata.network/address/0x921B8F6Ec83E405B715111eC1AE8B54A3ea063EB) |
-| ENCLAVE_ID_DAO | [0x413272890ab9F155a47A5F90a404Fb51aa259087](https://explorer-testnet.ata.network/address/0x413272890ab9F155a47A5F90a404Fb51aa259087) |
-| FMSPC_TCB_DAO | [0x7c04B466DebA13D48116b1339C62b35B9805E5A0](https://explorer-testnet.ata.network/address/0x7c04B466DebA13D48116b1339C62b35B9805E5A0) |
-| PCK_DAO | [0x6D4cA6AE5315EBBcb4331c82531db0ad8853Eb31](https://explorer-testnet.ata.network/address/0x6D4cA6AE5315EBBcb4331c82531db0ad8853Eb31) |
-| PCS_DAO | [0xD0335cbC73CA2f8EDd98a2BE3909f55642F414D7](https://explorer-testnet.ata.network/address/0xD0335cbC73CA2f8EDd98a2BE3909f55642F414D7) |
+| ENCLAVE_ID_DAO | [0x45f91C0d9Cf651785d93fcF7e9E97dE952CdB910](https://explorer-testnet.ata.network/address/0x45f91C0d9Cf651785d93fcF7e9E97dE952CdB910) |
+| FMSPC_TCB_DAO | [0x9c54C72867b07caF2e6255CE32983c28aFE40F26](https://explorer-testnet.ata.network/address/0x9c54C72867b07caF2e6255CE32983c28aFE40F26) |
+| PCK_DAO | [0x722525B96b62e182F8A095af0a79d4EA2037795C](https://explorer-testnet.ata.network/address/0x722525B96b62e182F8A095af0a79d4EA2037795C) |
+| PCS_DAO | [0xcf171ACd6c0a776f9d3E1F6Cac8067c982Ac6Ce1](https://explorer-testnet.ata.network/address/0xcf171ACd6c0a776f9d3E1F6Cac8067c982Ac6Ce1) |
 | ENCLAVE_IDENTITY_HELPER | [0xfd4a34b578B352FE1896CDafaEb0f45f993352Bf](https://explorer-testnet.ata.network/address/0xfd4a34b578B352FE1896CDafaEb0f45f993352Bf) |
 | FMSPC_TCB_HELPER | [0xC2A662e08A35513596E22D0aC236Ce72e59125EE](https://explorer-testnet.ata.network/address/0xC2A662e08A35513596E22D0aC236Ce72e59125EE) |
 | PCK_HELPER | [0x5213c0e3Ab478dbc83E8afFF8909717332E4f8E1](https://explorer-testnet.ata.network/address/0x5213c0e3Ab478dbc83E8afFF8909717332E4f8E1) |
@@ -110,10 +112,10 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 | PCCS_STORAGE | [0xE2636fdbd053da8E798D959304e20fADa934E8c0](https://explorer.ata.network/address/0xE2636fdbd053da8E798D959304e20fADa934E8c0) |
 | V3_VERIFIER | [0xF38a49322cAA0Ead71D4B1cF2afBb6d02BE5FC96](https://explorer.ata.network/address/0xF38a49322cAA0Ead71D4B1cF2afBb6d02BE5FC96) |
 | V4_VERIFIER | [0xfF47ecA64898692a86926CDDa794807be3f6567D](https://explorer.ata.network/address/0xfF47ecA64898692a86926CDDa794807be3f6567D) |
-| ENCLAVE_ID_DAO | [0x28111536292b34f37120861A46B39BF39187d73a](https://explorer.ata.network/address/0x28111536292b34f37120861A46B39BF39187d73a) |
-| FMSPC_TCB_DAO | [0x868c18869f68E0E0b0b7B2B4439f7fDDd0421e6b](https://explorer.ata.network/address/0x868c18869f68E0E0b0b7B2B4439f7fDDd0421e6b) |
-| PCK_DAO | [0xeCc198936FcA3Ca1fDc97B8612B32185908917B0](https://explorer.ata.network/address/0xeCc198936FcA3Ca1fDc97B8612B32185908917B0) |
-| PCS_DAO | [0x86f8865BCe8BE62CB8096b5B94fA3fB3a6ED330c](https://explorer.ata.network/address/0x86f8865BCe8BE62CB8096b5B94fA3fB3a6ED330c) |
+| ENCLAVE_ID_DAO | [0x45f91C0d9Cf651785d93fcF7e9E97dE952CdB910](https://explorer.ata.network/address/0x45f91C0d9Cf651785d93fcF7e9E97dE952CdB910) |
+| FMSPC_TCB_DAO | [0x9c54C72867b07caF2e6255CE32983c28aFE40F26](https://explorer.ata.network/address/0x9c54C72867b07caF2e6255CE32983c28aFE40F26) |
+| PCK_DAO | [0x31F18aA7B4cbAD7A726BCBF5AB3e286fC0b02A82](https://explorer.ata.network/address/0x31F18aA7B4cbAD7A726BCBF5AB3e286fC0b02A82) |
+| PCS_DAO | [0xcf171ACd6c0a776f9d3E1F6Cac8067c982Ac6Ce1](https://explorer.ata.network/address/0xcf171ACd6c0a776f9d3E1F6Cac8067c982Ac6Ce1) |
 | ENCLAVE_IDENTITY_HELPER | [0x13BECaa512713Ac7C2d7a04ba221aD5E02D43DFE](https://explorer.ata.network/address/0x13BECaa512713Ac7C2d7a04ba221aD5E02D43DFE) |
 | FMSPC_TCB_HELPER | [0xc99bF04C31bF3d026B5B47b2574FC19C1459B732](https://explorer.ata.network/address/0xc99bF04C31bF3d026B5B47b2574FC19C1459B732) |
 | X509_HELPER | [0x3e2fe733E444313A93Fa3f9AEd3bB203048dDE70](https://explorer.ata.network/address/0x3e2fe733E444313A93Fa3f9AEd3bB203048dDE70) |
@@ -127,10 +129,10 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 | PCCS_ROUTER | [0xdE5e69A2ca2556fe46883d754d987703bF28Cc51](https://holesky.etherscan.io/address/0xdE5e69A2ca2556fe46883d754d987703bF28Cc51) |
 | V3_VERIFIER | [0x12d7d59Ae1e4dbF83b08C82958Ac3FcEB84fB164](https://holesky.etherscan.io/address/0x12d7d59Ae1e4dbF83b08C82958Ac3FcEB84fB164) |
 | V4_VERIFIER | [0x3Cb24c454a29e796edF47a96dF32DD1855058258](https://holesky.etherscan.io/address/0x3Cb24c454a29e796edF47a96dF32DD1855058258) |
-| ENCLAVE_ID_DAO | [0x9f4b0fB3A95072bD133082e9683A3536669EFE07](https://holesky.etherscan.io/address/0x9f4b0fB3A95072bD133082e9683A3536669EFE07) |
-| FMSPC_TCB_DAO | [0xaB5074445E5ae3C650553d5a7560B3A7121635B9](https://holesky.etherscan.io/address/0xaB5074445E5ae3C650553d5a7560B3A7121635B9) |
-| PCK_DAO | [0x5B2d7781E3c44966769484daBCdc435EFD281c34](https://holesky.etherscan.io/address/0x5B2d7781E3c44966769484daBCdc435EFD281c34) |
-| PCS_DAO | [0x66FdB4E72d2F4a7e2081bf83F1FfACC9bbCb384b](https://holesky.etherscan.io/address/0x66FdB4E72d2F4a7e2081bf83F1FfACC9bbCb384b) |
+| ENCLAVE_ID_DAO | [0x45f91C0d9Cf651785d93fcF7e9E97dE952CdB910](https://holesky.etherscan.io/address/0x9f4b0fB3A95072bD133082e9683A3536669EFE07) |
+| FMSPC_TCB_DAO | [0x9c54C72867b07caF2e6255CE32983c28aFE40F26](https://holesky.etherscan.io/address/0xaB5074445E5ae3C650553d5a7560B3A7121635B9) |
+| PCK_DAO | [0x31F18aA7B4cbAD7A726BCBF5AB3e286fC0b02A82](https://holesky.etherscan.io/address/0x5B2d7781E3c44966769484daBCdc435EFD281c34) |
+| PCS_DAO | [0xcf171ACd6c0a776f9d3E1F6Cac8067c982Ac6Ce1](https://holesky.etherscan.io/address/0x66FdB4E72d2F4a7e2081bf83F1FfACC9bbCb384b) |
 
 #### Ethereum Sepolia Testnet
 
@@ -158,8 +160,8 @@ See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://downl
 ## Contributing
 
 **Before You Contribute**:
-* **Raise an Issue**: If you find a bug or wish to suggest a feature, please open an issue first to discuss it. Detail the bug or feature so we understand your intention.  
-* **Pull Requests (PR)**: Before submitting a PR, ensure:  
+* **Raise an Issue**: If you find a bug or wish to suggest a feature, please open an issue first to discuss it. Detail the bug or feature so we understand your intention.
+* **Pull Requests (PR)**: Before submitting a PR, ensure:
     * Your contribution successfully builds.
     * It includes tests, if applicable.
 

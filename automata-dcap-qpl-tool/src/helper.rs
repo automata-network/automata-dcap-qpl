@@ -5,8 +5,7 @@ use automata_dcap_qpl_common::*;
 use automata_dcap_qpl_contracts::{
     fmspc_tcb_dao::{FmspcTcbDao, TcbInfoJsonObj},
     pcs_dao::PcsDao,
-    FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS,
-    PCS_DAO_PORTAL_CONTRACT_ADDRESS,
+    parse_address_from_env_var::parse_address_from_env_var,
 };
 use ethers::prelude::*;
 use hex::FromHex;
@@ -169,10 +168,8 @@ pub fn check_missing_collateral(
                     provider,
                     wallet.with_chain_id(chain_id),
                 ));
-                let fmspc_tcb_dao_address = FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS
-                    .parse::<Address>()
-                    .unwrap();
-                let fmspc_tcb_dao = FmspcTcbDao::new(fmspc_tcb_dao_address, signer.clone());
+                let fmspc_tcb_dao =
+                    FmspcTcbDao::new(parse_address_from_env_var("FMSPC_TCB_DAO"), signer.clone());
                 match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).send()) {
                     Ok(pending_tx) => {
                         println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
@@ -239,8 +236,7 @@ pub fn check_missing_collateral(
                     provider,
                     wallet.with_chain_id(chain_id),
                 ));
-                let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
-                let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
+                let pcs_dao = PcsDao::new(parse_address_from_env_var("PCS_DAO"), signer.clone());
                 // PCK CRL
                 let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {
                     Ok(c) => hex::encode(c.to_der().unwrap()),

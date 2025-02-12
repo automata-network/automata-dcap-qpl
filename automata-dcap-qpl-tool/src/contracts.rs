@@ -5,9 +5,8 @@ use automata_dcap_qpl_contracts::{
     fmspc_tcb_dao::{FmspcTcbDao, TcbInfoJsonObj},
     pck_dao::PckDao,
     pcs_dao::PcsDao,
-    ENCLAVE_IDENTITY_DAO_PORTAL_CONTRACT_ADDRESS, FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS,
-    PCK_DAO_PORTAL_CONTRACT_ADDRESS, PCS_DAO_PORTAL_CONTRACT_ADDRESS,
 };
+use automata_dcap_qpl_contracts::parse_address_from_env_var::parse_address_from_env_var;
 use ethers::prelude::*;
 use hex::FromHex;
 use openssl::x509::{X509Crl, X509};
@@ -31,8 +30,9 @@ pub fn upsert_pck_cert(
         provider,
         wallet.with_chain_id(chain_id),
     ));
-    let pck_dao_address = PCK_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
-    let pck_dao = PckDao::new(pck_dao_address, signer.clone());
+
+    let pck_dao = PckDao::new(parse_address_from_env_var("PCK_DAO"), signer.clone());
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -60,8 +60,8 @@ pub fn upsert_pck_cert(
     }
     assert_eq!(certs.len(), 3);
 
-    let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
-    let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
+    let pcs_dao = PcsDao::new(parse_address_from_env_var("PCS_DAO"), signer.clone());
+
     // TODO: Check the Root and Platform/Process intermediate certs before upsert
     match rt.block_on(
         pcs_dao
@@ -184,13 +184,12 @@ pub fn upsert_enclave_identity(
         provider,
         wallet.with_chain_id(chain_id),
     ));
-    let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
-    let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
-    let enclave_identity_dao_address = ENCLAVE_IDENTITY_DAO_PORTAL_CONTRACT_ADDRESS
-        .parse::<Address>()
-        .unwrap();
+
+    let pcs_dao = PcsDao::new(parse_address_from_env_var("PCS_DAO"), signer.clone());
+
     let enclave_identity_dao =
-        EnclaveIdentityDao::new(enclave_identity_dao_address, signer.clone());
+        EnclaveIdentityDao::new(parse_address_from_env_var("ENCLAVE_ID_DAO"), signer.clone());
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -321,8 +320,8 @@ pub fn upsert_root_ca_crl(prv_key: &str, rpc_url: String, chain_id: u64, crl: &s
         provider,
         wallet.with_chain_id(chain_id),
     ));
-    let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
-    let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
+
+    let pcs_dao = PcsDao::new(parse_address_from_env_var("PCS_DAO"), signer.clone());
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -379,12 +378,11 @@ pub fn update_verification_collateral(
         .enable_all()
         .build()
         .unwrap();
-    let pcs_dao_address = PCS_DAO_PORTAL_CONTRACT_ADDRESS.parse::<Address>().unwrap();
-    let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
-    let fmspc_tcb_dao_address = FMSPC_TCB_DAO_PORTAL_CONTRACT_ADDRESS
-        .parse::<Address>()
-        .unwrap();
-    let fmspc_tcb_dao = FmspcTcbDao::new(fmspc_tcb_dao_address, signer.clone());
+
+    let pcs_dao = PcsDao::new(parse_address_from_env_var("PCS_DAO"), signer.clone());
+
+    let fmspc_tcb_dao =
+        FmspcTcbDao::new(parse_address_from_env_var("FMSPC_TCB_DAO"), signer.clone());
 
     // Root CA CRL
     if let Some(root_ca_crl) = root_ca_crl {
