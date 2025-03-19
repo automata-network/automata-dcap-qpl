@@ -12,7 +12,14 @@ use hex::FromHex;
 use openssl::x509::{X509Crl, X509};
 use std::{str::FromStr, sync::Arc};
 
-pub const GAS_PRICE: &str = "10000";
+lazy_static::lazy_static! {
+    pub static ref GAS_PRICE: String = {
+        match std::env::var("GAS_PRICE") {
+            Ok(g) => g,
+            Err(_) => "10000".to_string()
+        }
+    };
+}
 
 pub fn upsert_pck_cert(
     prv_key: &str,
@@ -68,7 +75,7 @@ pub fn upsert_pck_cert(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(CAID::Root as u8, Bytes::from_str(&certs[2]).unwrap())
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -94,7 +101,7 @@ pub fn upsert_pck_cert(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(ca as u8, Bytes::from_str(&certs[1]).unwrap())
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -132,7 +139,7 @@ pub fn upsert_pck_cert(
                 tcbm.clone(),
                 Bytes::from_str(&certs[0]).unwrap(),
             )
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_pck_cert] hash: {:?}", pending_tx.tx_hash());
@@ -152,7 +159,7 @@ pub fn upsert_pck_cert(
     match rt.block_on(
         pck_dao
             .upsert_platform_tcbs(qe_id, pce_id, cpu_svn, pce_svn, tcbm)
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send()
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_platform_tcbs] hash: {:?}", pending_tx.tx_hash());
@@ -223,7 +230,7 @@ pub fn upsert_enclave_identity(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(CAID::Root as u8, Bytes::from_str(&certs[1]).unwrap())
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -242,7 +249,7 @@ pub fn upsert_enclave_identity(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(CAID::Signing as u8, Bytes::from_str(&certs[0]).unwrap())
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -293,7 +300,7 @@ pub fn upsert_enclave_identity(
     match rt.block_on(
         enclave_identity_dao
             .upsert_enclave_identity(id, version, enclave_identity_obj)
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -338,7 +345,7 @@ pub fn upsert_root_ca_crl(prv_key: &str, rpc_url: String, chain_id: u64, crl: &s
     match rt.block_on(
         pcs_dao
             .upsert_root_ca_crl(Bytes::from_str(&crl).unwrap())
-            .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
@@ -408,7 +415,7 @@ pub fn update_verification_collateral(
         match rt.block_on(
             pcs_dao
                 .upsert_pck_crl(pck as u8, Bytes::from_str(&pck_crl).unwrap())
-                .gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send(),
+                .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
         ) {
             Ok(pending_tx) => {
                 println!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
@@ -440,7 +447,7 @@ pub fn update_verification_collateral(
     };
     println!("tcb_info_obj.tcb_info_str: {}", tcb_info_obj.tcb_info_str);
     println!("tcb_info_obj.signature: {:?}", tcb_info_obj.signature);
-    match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(GAS_PRICE, 10).unwrap()).send()) {
+    match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()) {
         Ok(pending_tx) => {
             println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
             match rt.block_on(pending_tx) {
