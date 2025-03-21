@@ -12,6 +12,15 @@ use hex::FromHex;
 use openssl::x509::{X509Crl, X509};
 use std::{str::FromStr, sync::Arc};
 
+lazy_static::lazy_static! {
+    pub static ref GAS_PRICE: String = {
+        match std::env::var("GAS_PRICE") {
+            Ok(g) => g,
+            Err(_) => "10000".to_string()
+        }
+    };
+}
+
 pub fn upsert_pck_cert(
     prv_key: &str,
     rpc_url: String,
@@ -66,7 +75,7 @@ pub fn upsert_pck_cert(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(CAID::Root as u8, Bytes::from_str(&certs[2]).unwrap())
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -92,7 +101,7 @@ pub fn upsert_pck_cert(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(ca as u8, Bytes::from_str(&certs[1]).unwrap())
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -130,7 +139,7 @@ pub fn upsert_pck_cert(
                 tcbm.clone(),
                 Bytes::from_str(&certs[0]).unwrap(),
             )
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_pck_cert] hash: {:?}", pending_tx.tx_hash());
@@ -150,7 +159,7 @@ pub fn upsert_pck_cert(
     match rt.block_on(
         pck_dao
             .upsert_platform_tcbs(qe_id, pce_id, cpu_svn, pce_svn, tcbm)
-            .send()
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_platform_tcbs] hash: {:?}", pending_tx.tx_hash());
@@ -221,7 +230,7 @@ pub fn upsert_enclave_identity(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(CAID::Root as u8, Bytes::from_str(&certs[1]).unwrap())
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -240,7 +249,7 @@ pub fn upsert_enclave_identity(
     match rt.block_on(
         pcs_dao
             .upsert_pcs_certificates(CAID::Signing as u8, Bytes::from_str(&certs[0]).unwrap())
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -291,7 +300,7 @@ pub fn upsert_enclave_identity(
     match rt.block_on(
         enclave_identity_dao
             .upsert_enclave_identity(id, version, enclave_identity_obj)
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!(
@@ -336,7 +345,7 @@ pub fn upsert_root_ca_crl(prv_key: &str, rpc_url: String, chain_id: u64, crl: &s
     match rt.block_on(
         pcs_dao
             .upsert_root_ca_crl(Bytes::from_str(&crl).unwrap())
-            .send(),
+            .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
@@ -367,6 +376,7 @@ pub fn update_verification_collateral(
     collateral_version: String,
     enclave_identity_str: &str,
     enclave_identity_issuer_chains_str: &str,
+    all_verification_collateral: u64,
 ) {
     let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
     let wallet = prv_key.parse::<LocalWallet>().unwrap();
@@ -385,36 +395,42 @@ pub fn update_verification_collateral(
         FmspcTcbDao::new(parse_address_from_env_var("FMSPC_TCB_DAO"), signer.clone());
 
     // Root CA CRL
-    if let Some(root_ca_crl) = root_ca_crl {
-        upsert_root_ca_crl(prv_key, rpc_url.clone(), chain_id, root_ca_crl);
+    if all_verification_collateral == 1 {
+        if let Some(root_ca_crl) = root_ca_crl {
+            upsert_root_ca_crl(prv_key, rpc_url.clone(), chain_id, root_ca_crl);
+        }
     }
 
     // PCK CRL
-    let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {
-        Ok(c) => hex::encode(c.to_der().unwrap()),
-        Err(err) => {
-            println!("Error parsing certificate: {:?}", err);
-            return;
-        }
-    };
-    match rt.block_on(
-        pcs_dao
-            .upsert_pck_crl(pck as u8, Bytes::from_str(&pck_crl).unwrap())
-            .send(),
-    ) {
-        Ok(pending_tx) => {
-            println!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
-                    println!("txn[upsert_pck_crl] receipt: {:?}", receipt);
-                }
-                Err(err) => {
-                    println!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+    if all_verification_collateral == 1 {
+        let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {
+            Ok(c) => hex::encode(c.to_der().unwrap()),
+            Err(err) => {
+                println!("Error parsing certificate: {:?}", err);
+                return;
+            }
+        };
+        println!("[Jiaquan] pck: {:?}", pck as u8);
+        println!("[Jiaquan] pck_crl: {:?}", Bytes::from_str(&pck_crl).unwrap());
+        match rt.block_on(
+            pcs_dao
+                .upsert_pck_crl(pck as u8, Bytes::from_str(&pck_crl).unwrap())
+                .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send(),
+        ) {
+            Ok(pending_tx) => {
+                println!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
+                match rt.block_on(pending_tx) {
+                    Ok(receipt) => {
+                        println!("txn[upsert_pck_crl] receipt: {:?}", receipt);
+                    }
+                    Err(err) => {
+                        println!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                    }
                 }
             }
-        }
-        Err(err) => {
-            println!("txn[upsert_pck_crl] meet error: {:?}", err);
+            Err(err) => {
+                println!("txn[upsert_pck_crl] meet error: {:?}", err);
+            }
         }
     }
 
@@ -431,7 +447,7 @@ pub fn update_verification_collateral(
     };
     println!("tcb_info_obj.tcb_info_str: {}", tcb_info_obj.tcb_info_str);
     println!("tcb_info_obj.signature: {:?}", tcb_info_obj.signature);
-    match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).send()) {
+    match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()) {
         Ok(pending_tx) => {
             println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
             match rt.block_on(pending_tx) {
@@ -449,13 +465,15 @@ pub fn update_verification_collateral(
     }
 
     // QE/TDX Identity
-    upsert_enclave_identity(
-        prv_key,
-        rpc_url,
-        chain_id,
-        enclave_id,
-        collateral_version,
-        enclave_identity_str,
-        enclave_identity_issuer_chains_str,
-    );
+    if all_verification_collateral == 1 {
+        upsert_enclave_identity(
+            prv_key,
+            rpc_url,
+            chain_id,
+            enclave_id,
+            collateral_version,
+            enclave_identity_str,
+            enclave_identity_issuer_chains_str,
+        );
+    }
 }

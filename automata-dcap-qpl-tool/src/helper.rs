@@ -170,7 +170,7 @@ pub fn check_missing_collateral(
                 ));
                 let fmspc_tcb_dao =
                     FmspcTcbDao::new(parse_address_from_env_var("FMSPC_TCB_DAO"), signer.clone());
-                match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).send()) {
+                match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()) {
                     Ok(pending_tx) => {
                         println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
                         match rt.block_on(pending_tx) {
@@ -248,6 +248,7 @@ pub fn check_missing_collateral(
                 match rt.block_on(
                     pcs_dao
                         .upsert_pck_crl(pck as u8, Bytes::from_str(&pck_crl).unwrap())
+                        .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap())
                         .send(),
                 ) {
                     Ok(pending_tx) => {
@@ -428,6 +429,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
     data_source: DataSource,
     collateral_version: String,
     pccs_url: String,
+    all_verification_collateral: u64,
 ) {
     let pck_id = if pck_ca == "platform" {
         CAID::Platform
@@ -543,6 +545,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
             collateral_version.clone(),
             enclave_identity_str,
             enclave_identity_issuer_chains_str,
+            all_verification_collateral,
         );
 
         let ret = azure::az_dcap_sgx_ql_free_quote_verification_collateral(p_quote_collateral);
@@ -707,6 +710,7 @@ pub fn sgx_ql_get_quote_verification_collateral(
                 collateral_version.clone(),
                 qe_identity_str.as_str(),
                 enclave_identity_issuer_chains_str.as_str(),
+                all_verification_collateral,
             );
         } else {
             println!("[ERROR] {} returns {:?}, exit", req_url, response.status());
@@ -724,6 +728,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
     data_source: DataSource,
     collateral_version: String,
     pccs_url: String,
+    all_verification_collateral: u64,
 ) {
     let pck_id = if pck_ca == "platform" {
         CAID::Platform
@@ -839,6 +844,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
             collateral_version.clone(),
             enclave_identity_str,
             enclave_identity_issuer_chains_str,
+            all_verification_collateral,
         );
 
         let ret = azure::az_dcap_tdx_ql_free_quote_verification_collateral(p_quote_collateral);
@@ -1002,6 +1008,7 @@ pub fn tdx_ql_get_quote_verification_collateral(
                 collateral_version.clone(),
                 qe_identity_str.as_str(),
                 enclave_identity_issuer_chains_str.as_str(),
+                all_verification_collateral,
             );
         } else {
             println!("[ERROR] {} returns {:?}, exit", req_url, response.status());

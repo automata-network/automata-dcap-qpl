@@ -114,6 +114,12 @@ struct Opt {
         help = "pck_ca used in sgx_ql_get_quote_verification_collateral or tdx_ql_get_quote_verification_collateral, acceptable value: platform or processor"
     )]
     pck_ca: String,
+    #[structopt(
+        long = "all_verification_collateral",
+        default_value = "0",
+        help = "Default: Automata Testnet Chain ID"
+    )]
+    all_verification_collateral: u64,
 }
 
 fn main() {
@@ -206,6 +212,7 @@ fn main() {
             data_source,
             opt.version,
             opt.pccs_url,
+            opt.all_verification_collateral,
         );
     } else if opt.func == "tdx_ql_get_quote_verification_collateral".to_string() {
         let fmspc = opt.fmspc.trim_start_matches("0x").to_string();
@@ -221,6 +228,7 @@ fn main() {
             data_source,
             opt.version,
             opt.pccs_url,
+            opt.all_verification_collateral,
         );
     } else if opt.func == "sgx_ql_get_qve_identity".to_string() {
         helper::sgx_ql_get_qve_identity(
