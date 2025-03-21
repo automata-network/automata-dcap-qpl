@@ -170,7 +170,7 @@ pub fn check_missing_collateral(
                 ));
                 let fmspc_tcb_dao =
                     FmspcTcbDao::new(parse_address_from_env_var("FMSPC_TCB_DAO"), signer.clone());
-                match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).send()) {
+                match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()) {
                     Ok(pending_tx) => {
                         println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
                         match rt.block_on(pending_tx) {
@@ -248,6 +248,7 @@ pub fn check_missing_collateral(
                 match rt.block_on(
                     pcs_dao
                         .upsert_pck_crl(pck as u8, Bytes::from_str(&pck_crl).unwrap())
+                        .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap())
                         .send(),
                 ) {
                     Ok(pending_tx) => {
