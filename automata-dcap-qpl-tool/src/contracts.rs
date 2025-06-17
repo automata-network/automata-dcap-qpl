@@ -5,8 +5,9 @@ use automata_dcap_qpl_contracts::{
     fmspc_tcb_dao::{FmspcTcbDao, TcbInfoJsonObj},
     pck_dao::PckDao,
     pcs_dao::PcsDao,
+    tcb_eval_dao::{TcbEvalDao, TcbEvalJsonObj},
 };
-use automata_dcap_qpl_contracts::parse_address_from_env_var::parse_address_from_env_var;
+use automata_dcap_qpl_contracts::parse_address_from_env_var::*;
 use ethers::prelude::*;
 use hex::FromHex;
 use openssl::x509::{X509Crl, X509};
@@ -475,5 +476,59 @@ pub fn update_verification_collateral(
             enclave_identity_str,
             enclave_identity_issuer_chains_str,
         );
+    }
+}
+
+pub async fn upsert_tcb_eval_data_number(
+    prv_key: &str,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    tcb_eval_data_number_dao: &str,
+    tcb_eval_data_number_str: &str,
+) -> bool {
+    let provider = Provider::<Http>::try_from(rpc_url).unwrap();
+    let wallet = prv_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+
+    let tcb_eval_dao = TcbEvalDao::new(parse_address_from_str(tcb_eval_data_number_dao), signer.clone());
+
+    let tcb_eval_data_number: TcbEvalDataNumber = serde_json::from_str(tcb_eval_data_number_str).unwrap();
+    let tcb_eval_data_number_str = &tcb_eval_data_number_str[r#""tcbEvaluationDataNumbers":{"#.len()..];
+    let end_idx = tcb_eval_data_number_str.find(r#","signature""#).unwrap();
+    let tcb_eval_data_number_str = &tcb_eval_data_number_str[..end_idx];
+    let tcb_eval_data_number_obj = TcbEvalJsonObj {
+        tcb_evaluation_data_numbers: tcb_eval_data_number_str.to_string(),
+        signature: Bytes::from_hex(&tcb_eval_data_number.signature).unwrap(),
+    };
+    println!("tcb_evaluation_data_numbers = {}", tcb_eval_data_number_obj.tcb_evaluation_data_numbers);
+    println!("signature = {}", tcb_eval_data_number_obj.signature);
+    match tcb_eval_dao
+            .upsert_tcb_evaluation_data(tcb_eval_data_number_obj)
+            .gas_price(gas_price).send().await
+    {
+        Ok(pending_tx) => {
+            println!(
+                "txn[upsert_tcb_evaluation_data] hash: {:?}",
+                pending_tx.tx_hash()
+            );
+            match pending_tx.await {
+                Ok(receipt) => {
+                    println!("txn[upsert_tcb_evaluation_data] receipt: {:?}", receipt);
+                    return true;
+                }
+                Err(err) => {
+                    println!("txn[upsert_tcb_evaluation_data] receipt meet error: {:?}", err);
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            println!("txn[upsert_tcb_evaluation_data] meet error: {:?}", err);
+            return false;
+        }
     }
 }

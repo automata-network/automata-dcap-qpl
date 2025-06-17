@@ -2,17 +2,19 @@ use crate::cloud_providers::*;
 use crate::contracts::*;
 use crate::pccs_types::*;
 use automata_dcap_qpl_common::*;
+use automata_dcap_qpl_contracts::parse_address_from_env_var::parse_address_from_str;
 use automata_dcap_qpl_contracts::{
+    enclave_identity_dao::{EnclaveIdentityDao, EnclaveIdentityJsonObj},
     fmspc_tcb_dao::{FmspcTcbDao, TcbInfoJsonObj},
-    pcs_dao::PcsDao,
     parse_address_from_env_var::parse_address_from_env_var,
+    pcs_dao::PcsDao,
 };
 use ethers::prelude::*;
 use hex::FromHex;
 use pccs_reader_rs::*;
 
+use openssl::x509::{X509Crl, X509};
 use reqwest;
-use openssl::x509::X509Crl;
 use std::ffi::{c_char, CStr, CString};
 use std::{str::FromStr, sync::Arc};
 
@@ -20,7 +22,7 @@ const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
 
 fn get_intel_pcs_subscription_key() -> String {
     match std::env::var(INTEL_PCS_SUBSCRIPTION_KEY_ENV) {
-        Ok(v) => { v },
+        Ok(v) => v,
         Err(_) => {
             println!("[ERROR] pleause configure the intel pcs subscription key");
             format!("")
@@ -40,7 +42,8 @@ pub fn check_missing_collateral(
         .build()
         .unwrap();
     loop {
-        let missing_collateral: MissingCollateral = rt.block_on(pccs_reader_rs::find_missing_collaterals_from_quote(quote));
+        let missing_collateral: MissingCollateral =
+            rt.block_on(pccs_reader_rs::find_missing_collaterals_from_quote(quote));
         println!("missing_collateral: {:?}", missing_collateral);
         match missing_collateral {
             MissingCollateral::None => break,
@@ -48,10 +51,8 @@ pub fn check_missing_collateral(
                 let (enclave_id, enclave_id_type) = match enclave_id_type {
                     pccs_reader_rs::pccs::enclave_id::EnclaveIdType::TDQE => {
                         (EnclaveID::TD_QE, "tdx".to_string())
-                    },
-                    _ => {
-                        (EnclaveID::QE, "sgx".to_string())
                     }
+                    _ => (EnclaveID::QE, "sgx".to_string()),
                 };
                 let collateral_version = if quote_version == 3 {
                     "v3".to_string()
@@ -60,9 +61,7 @@ pub fn check_missing_collateral(
                 };
                 let req_url = format!(
                     "{}/{}/certification/{}/qe/identity",
-                    pccs_url,
-                    enclave_id_type,
-                    collateral_version
+                    pccs_url, enclave_id_type, collateral_version
                 );
                 let response = match rt.block_on(reqwest::get(req_url.clone())) {
                     Ok(v) => v,
@@ -73,14 +72,21 @@ pub fn check_missing_collateral(
                 };
                 if response.status().is_success() {
                     let headers = response.headers();
-                    let enclave_identity_issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                        cert.to_str().unwrap().to_string()
-                    } else {
-                        println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
-                        return;
-                    };
-                    let enclave_identity_issuer_chains_str = urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
-                    let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
+                    let enclave_identity_issuer_chains_str =
+                        if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                            cert.to_str().unwrap().to_string()
+                        } else {
+                            println!(
+                                "Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit",
+                                req_url
+                            );
+                            return;
+                        };
+                    let enclave_identity_issuer_chains_str =
+                        urlencoding::decode(&enclave_identity_issuer_chains_str)
+                            .expect("Invalid UTF-8");
+                    let enclave_identity_issuer_chains_str =
+                        enclave_identity_issuer_chains_str.to_string();
                     let qe_identity_str = match rt.block_on(response.text()) {
                         Ok(v) => v,
                         Err(_) => {
@@ -88,7 +94,10 @@ pub fn check_missing_collateral(
                             return;
                         }
                     };
-                    println!("Enclave-Identity-Issuer-Chain: {}", enclave_identity_issuer_chains_str);
+                    println!(
+                        "Enclave-Identity-Issuer-Chain: {}",
+                        enclave_identity_issuer_chains_str
+                    );
                     println!("QE-Identity: {}", qe_identity_str);
 
                     upsert_enclave_identity(
@@ -101,7 +110,7 @@ pub fn check_missing_collateral(
                         enclave_identity_issuer_chains_str.as_str(),
                     )
                 }
-            },
+            }
             MissingCollateral::FMSPCTCB(tcb_type, fmspc, tcb_version) => {
                 let tcb_type = if tcb_type == 1 {
                     "tdx".to_string()
@@ -115,10 +124,7 @@ pub fn check_missing_collateral(
                 };
                 let req_url = format!(
                     "{}/{}/certification/{}/tcb?fmspc={}",
-                    pccs_url,
-                    tcb_type,
-                    collateral_version,
-                    fmspc
+                    pccs_url, tcb_type, collateral_version, fmspc
                 );
                 println!("req_url: {:?}", req_url);
                 let response = match rt.block_on(reqwest::get(req_url.clone())) {
@@ -170,7 +176,12 @@ pub fn check_missing_collateral(
                 ));
                 let fmspc_tcb_dao =
                     FmspcTcbDao::new(parse_address_from_env_var("FMSPC_TCB_DAO"), signer.clone());
-                match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()) {
+                match rt.block_on(
+                    fmspc_tcb_dao
+                        .upsert_fmspc_tcb(tcb_info_obj)
+                        .gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap())
+                        .send(),
+                ) {
                     Ok(pending_tx) => {
                         println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
                         match rt.block_on(pending_tx) {
@@ -186,19 +197,19 @@ pub fn check_missing_collateral(
                         println!("txn[upsert_fmspc_tcb] meet error: {:?}", err);
                     }
                 }
-            },
+            }
             MissingCollateral::PCS(pck_ca, _, _) => {
                 let (pck_ca, pck) = match pck_ca {
                     pccs_reader_rs::pccs::pcs::IPCSDao::CA::PROCESSOR => {
                         ("processor".to_string(), CAID::Processor)
-                    },
+                    }
                     pccs_reader_rs::pccs::pcs::IPCSDao::CA::PLATFORM => {
                         ("platform".to_string(), CAID::Platform)
-                    },
+                    }
                     _ => {
                         // should not happen because it's already included in the tcb/qe cert chain
                         continue;
-                    },
+                    }
                 };
                 let req_url = format!(
                     "{}/sgx/certification/v3/pckcrl?ca={}",
@@ -319,7 +330,8 @@ pub fn sgx_ql_get_quote_config(
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
         let p_pck_cert_id: *const SgxQlPckCertId = &pck_cert_id as *const SgxQlPckCertId;
-        let mut sgx_ql_config: SgxQlConfig = SgxQlConfig::new([0_u8; 16], 0, std::ptr::null_mut(), 0);
+        let mut sgx_ql_config: SgxQlConfig =
+            SgxQlConfig::new([0_u8; 16], 0, std::ptr::null_mut(), 0);
         let mut p_sgx_ql_config: *mut SgxQlConfig = &mut sgx_ql_config as *mut SgxQlConfig;
         let pp_sgx_ql_config: *mut *mut SgxQlConfig = &mut p_sgx_ql_config as *mut *mut SgxQlConfig;
         let ret = azure::az_dcap_sgx_ql_get_quote_config(p_pck_cert_id, pp_sgx_ql_config);
@@ -329,7 +341,13 @@ pub fn sgx_ql_get_quote_config(
 
         let tcbm = unsafe {
             let mut tcbm_vec = Vec::new();
-            let mut tcbm_cpu_svn = quote_config.as_ref().unwrap().cert_cpu_svn.cpu_svn.clone().to_vec();
+            let mut tcbm_cpu_svn = quote_config
+                .as_ref()
+                .unwrap()
+                .cert_cpu_svn
+                .cpu_svn
+                .clone()
+                .to_vec();
             tcbm_vec.append(&mut tcbm_cpu_svn);
             let tcbm_pce_svn = quote_config.as_ref().unwrap().cert_pce_isv_svn.isv_svn;
             let mut tcbm_pce_svn = tcbm_pce_svn.to_le_bytes().to_vec();
@@ -378,20 +396,25 @@ pub fn sgx_ql_get_quote_config(
         let client = reqwest::Client::new();
         let query_params = vec![
             ("cpusvn".to_string(), hex::encode(cpu_svn.cpu_svn)),
-            ("pcesvn".to_string(), hex::encode(pce_svn.isv_svn.to_le_bytes())),
-            ("pceid".to_string(), hex::encode(pck_cert_id.pce_id.to_le_bytes())),
-            ("encrypted_ppid".to_string(), encrypted_ppid)
+            (
+                "pcesvn".to_string(),
+                hex::encode(pce_svn.isv_svn.to_le_bytes()),
+            ),
+            (
+                "pceid".to_string(),
+                hex::encode(pck_cert_id.pce_id.to_le_bytes()),
+            ),
+            ("encrypted_ppid".to_string(), encrypted_ppid),
         ];
-        let mut req_builder = client
-            .get(req_url.clone())
-            .query(&query_params);
+        let mut req_builder = client.get(req_url.clone()).query(&query_params);
         if collateral_version == "v3" {
             let intel_pcs_subscription_key = get_intel_pcs_subscription_key();
             if intel_pcs_subscription_key.is_empty() {
                 return;
             }
             let intel_pcs_subscription_key_str = intel_pcs_subscription_key.as_str();
-            req_builder = req_builder.header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str);
+            req_builder =
+                req_builder.header("Ocp-Apim-Subscription-Key", intel_pcs_subscription_key_str);
         }
         let response = match rt.block_on(req_builder.send()) {
             Ok(v) => v,
@@ -440,9 +463,13 @@ pub fn sgx_ql_get_quote_verification_collateral(
 
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
-        let fmspc_slices = hex::decode(fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
+        let fmspc_slices =
+            hex::decode(fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
         let fmspc_size = fmspc_slices.len() as u16;
-        println!("fmspc_slices: {:?}, fmspc_size: {:?}", fmspc_slices, fmspc_size);
+        println!(
+            "fmspc_slices: {:?}, fmspc_size: {:?}",
+            fmspc_slices, fmspc_size
+        );
         let fmspc_pointer = fmspc_slices.as_ptr();
         let pck_ca_c_string = CString::new(pck_ca.clone()).expect("CString conversion failed");
         let pck_ca_pointer = pck_ca_c_string.as_ptr();
@@ -680,13 +707,18 @@ pub fn sgx_ql_get_quote_verification_collateral(
         };
         if response.status().is_success() {
             let headers = response.headers();
-            let enclave_identity_issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                cert.to_str().unwrap().to_string()
-            } else {
-                println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
-                return;
-            };
-            let enclave_identity_issuer_chains_str = urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
+            let enclave_identity_issuer_chains_str =
+                if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                    cert.to_str().unwrap().to_string()
+                } else {
+                    println!(
+                        "Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit",
+                        req_url
+                    );
+                    return;
+                };
+            let enclave_identity_issuer_chains_str =
+                urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
             let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
             let qe_identity_str = match rt.block_on(response.text()) {
                 Ok(v) => v,
@@ -695,7 +727,10 @@ pub fn sgx_ql_get_quote_verification_collateral(
                     return;
                 }
             };
-            println!("SGX-Enclave-Identity-Issuer-Chain: {}", enclave_identity_issuer_chains_str);
+            println!(
+                "SGX-Enclave-Identity-Issuer-Chain: {}",
+                enclave_identity_issuer_chains_str
+            );
             println!("SGX-QE-Identity: {}", qe_identity_str);
 
             update_verification_collateral(
@@ -739,9 +774,13 @@ pub fn tdx_ql_get_quote_verification_collateral(
 
     if data_source == DataSource::All || data_source == DataSource::Azure {
         std::env::set_var("AZDCAP_COLLATERAL_VERSION", collateral_version.clone());
-        let fmspc_slices = hex::decode(fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
+        let fmspc_slices =
+            hex::decode(fmspc.trim_start_matches("0x")).expect("Failed to decode hex string");
         let fmspc_size = fmspc_slices.len() as u16;
-        println!("fmspc_slices: {:?}, fmspc_size: {:?}", fmspc_slices, fmspc_size);
+        println!(
+            "fmspc_slices: {:?}, fmspc_size: {:?}",
+            fmspc_slices, fmspc_size
+        );
         let fmspc_pointer = fmspc_slices.as_ptr();
         let pck_ca_c_string = CString::new(pck_ca.clone()).expect("CString conversion failed");
         let pck_ca_pointer = pck_ca_c_string.as_ptr();
@@ -979,13 +1018,18 @@ pub fn tdx_ql_get_quote_verification_collateral(
         };
         if response.status().is_success() {
             let headers = response.headers();
-            let enclave_identity_issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                cert.to_str().unwrap().to_string()
-            } else {
-                println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
-                return;
-            };
-            let enclave_identity_issuer_chains_str = urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
+            let enclave_identity_issuer_chains_str =
+                if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                    cert.to_str().unwrap().to_string()
+                } else {
+                    println!(
+                        "Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit",
+                        req_url
+                    );
+                    return;
+                };
+            let enclave_identity_issuer_chains_str =
+                urlencoding::decode(&enclave_identity_issuer_chains_str).expect("Invalid UTF-8");
             let enclave_identity_issuer_chains_str = enclave_identity_issuer_chains_str.to_string();
             let qe_identity_str = match rt.block_on(response.text()) {
                 Ok(v) => v,
@@ -994,7 +1038,10 @@ pub fn tdx_ql_get_quote_verification_collateral(
                     return;
                 }
             };
-            println!("SGX-Enclave-Identity-Issuer-Chain: {}", enclave_identity_issuer_chains_str);
+            println!(
+                "SGX-Enclave-Identity-Issuer-Chain: {}",
+                enclave_identity_issuer_chains_str
+            );
             println!("TDX-QE-Identity: {}", qe_identity_str);
             update_verification_collateral(
                 &private_key,
@@ -1112,12 +1159,16 @@ pub fn sgx_ql_get_qve_identity(
         };
         if response.status().is_success() {
             let headers = response.headers();
-            let issuer_chains_str = if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
-                cert.to_str().unwrap().to_string()
-            } else {
-                println!("Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit", req_url);
-                return;
-            };
+            let issuer_chains_str =
+                if let Some(cert) = headers.get("SGX-Enclave-Identity-Issuer-Chain") {
+                    cert.to_str().unwrap().to_string()
+                } else {
+                    println!(
+                        "Cannot find SGX-Enclave-Identity-Issuer-Chain in {:?}, exit",
+                        req_url
+                    );
+                    return;
+                };
             let issuer_chains_str = urlencoding::decode(&issuer_chains_str).expect("Invalid UTF-8");
             let issuer_chains_str = issuer_chains_str.to_string();
             let qve_identity_str = match rt.block_on(response.text()) {
@@ -1209,6 +1260,908 @@ pub fn sgx_ql_get_root_ca_crl(
                 }
             };
             println!("SGX-Root-CA-Crl: {:?}", content);
+        }
+    }
+}
+
+pub async fn upsert_tcb_eval_data_number_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    platform: &str, // "tdx" or "sgx"
+    tcb_eval_data_number_dao: &str,
+) -> bool {
+    // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html#pcs-retrieve-tcbevalnumbers-v4
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/{}/certification/v4/tcbevaluationdatanumbers",
+        platform
+    );
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    if response.status().is_success() {
+        let tcb_eval_data_number = match response.text().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
+                return false;
+            }
+        };
+        log::info!("TCB Evaluation Data Number: {}", tcb_eval_data_number);
+        upsert_tcb_eval_data_number(
+            &private_key,
+            rpc_url,
+            chain_id,
+            gas_price,
+            tcb_eval_data_number_dao,
+            &tcb_eval_data_number,
+        )
+        .await
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    }
+}
+
+pub async fn upsert_tcb_fmspc_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    fmspc: &str,
+    platform: &str,                       // "tdx" or "sgx"
+    version: &str,                        // "v3" or "v4" or "v5"
+    collateral_update_type: Option<&str>, // "standard" or "early"
+    tcb_evaluation_data_number: Option<u32>,
+    fmspc_tcb_dao_contract_addr: &str,
+) -> bool {
+    let mut req_url = format!(
+        "https://api.trustedservices.intel.com/{}/certification/{}/tcb?fmspc={}",
+        platform, version, fmspc
+    );
+    if collateral_update_type.is_some() {
+        req_url.push_str(&format!("&update={}", collateral_update_type.unwrap()));
+    } else if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
+        req_url.push_str(&format!(
+            "&tcbEvaluationDataNumber={}",
+            tcb_evaluation_data_number.unwrap()
+        ));
+    }
+    log::debug!("req_url: {:?}", req_url);
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let tcb_info_str = if response.status().is_success() {
+        let headers = response.headers();
+        // v3
+        if let Some(cert) = headers.get("SGX-TCB-Info-Issuer-Chain") {
+            log::info!("SGX-TCB-Info-Issuer-Chain: {:?}", cert);
+        }
+        // v4
+        if let Some(cert) = headers.get("TCB-Info-Issuer-Chain") {
+            log::info!("TCB-Info-Issuer-Chain: {:?}", cert);
+        }
+        let content = match response.text().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
+                return false;
+            }
+        };
+        log::info!("TCB-Info: {}", content);
+        content
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    // TCB Info
+    let tcb_info: TcbInfo = serde_json::from_str(&tcb_info_str).unwrap();
+    let tcb_info_str = &tcb_info_str[r#""tcbInfo":{"#.len()..];
+    let end_idx = tcb_info_str.find(r#","signature""#).unwrap();
+    let tcb_info_str = &tcb_info_str[..end_idx];
+    let tcb_info_obj = TcbInfoJsonObj {
+        tcb_info_str: tcb_info_str.to_string(),
+        signature: Bytes::from_hex(tcb_info.signature).unwrap(),
+    };
+    log::info!("tcb_info_obj.tcb_info_str: {}", tcb_info_obj.tcb_info_str);
+    log::info!("tcb_info_obj.signature: {:?}", tcb_info_obj.signature);
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let fmspc_tcb_dao = FmspcTcbDao::new(
+        parse_address_from_str(fmspc_tcb_dao_contract_addr),
+        signer.clone(),
+    );
+    match fmspc_tcb_dao
+        .upsert_fmspc_tcb(tcb_info_obj)
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!("txn[upsert_fmspc_tcb] receipt: {:?}", receipt);
+                    return true;
+                }
+                Err(err) => {
+                    log::error!("txn[upsert_fmspc_tcb] receipt meet error: {:?}", err);
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("txn[upsert_fmspc_tcb] meet error: {:?}", err);
+            return false;
+        }
+    }
+}
+
+pub async fn upsert_root_ca_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    let req_url =
+        format!("https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca=platform",);
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let cert_chains = if response.status().is_success() {
+        let headers = response.headers();
+        if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
+            log::info!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
+            let cert_chain = cert.to_str().unwrap().to_string();
+            let issuer_chains_str = match urlencoding::decode(&cert_chain) {
+                Ok(v) => v,
+                Err(_) => {
+                    log::error!("Invalid UTF-8 in SGX-PCK-CRL-Issuer-Chain");
+                    return false;
+                }
+            };
+            issuer_chains_str.to_string()
+        } else {
+            log::error!(
+                "Cannot find SGX-PCK-CRL-Issuer-Chain in {:?}, exit",
+                req_url
+            );
+            return false;
+        }
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    let cert_chains_str = cert_chains.as_str();
+    let certs_str: Vec<&str> = cert_chains_str.split("-----END CERTIFICATE-----").collect();
+    let mut certs = Vec::new();
+    for cert in certs_str {
+        let current_cert = cert.trim();
+        if current_cert == "\0" {
+            continue;
+        }
+        if !current_cert.is_empty() {
+            let cert_str: String = format!("{}\n-----END CERTIFICATE-----\n", current_cert);
+            match X509::from_pem(&cert_str.as_bytes()) {
+                Ok(cert) => {
+                    certs.push(hex::encode(cert.to_der().unwrap()));
+                }
+                Err(err) => {
+                    log::error!("Error parsing certificate: {:?}", err);
+                    return false;
+                }
+            }
+        }
+    }
+    assert_eq!(certs.len(), 2);
+
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let pcs_dao = PcsDao::new(
+        parse_address_from_str(pcs_dao_contract_addr),
+        signer.clone(),
+    );
+
+    match pcs_dao
+        .upsert_pcs_certificates(CAID::Root as u8, Bytes::from_str(&certs[1]).unwrap())
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!(
+                "txn[upsert_pcs_certificates][root] hash: {:?}",
+                pending_tx.tx_hash()
+            );
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!("txn[upsert_pcs_certificates][root] receipt: {:?}", receipt);
+                    return true;
+                }
+                Err(err) => {
+                    log::error!(
+                        "txn[upsert_pcs_certificates][root] receipt meet error: {:?}",
+                        err
+                    );
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("txn[upsert_pcs_certificates][root] meet error: {:?}", err);
+            return false;
+        }
+    }
+}
+
+pub async fn upsert_root_ca_crl_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    let req_url = format!("https://certificates.trustedservices.intel.com/IntelSGXRootCA.crl",);
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let root_ca_crl = if response.status().is_success() {
+        let content = match response.text().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
+                return false;
+            }
+        };
+        log::info!("ROOT-CA-CRL: {}", content);
+        content
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let pcs_dao = PcsDao::new(
+        parse_address_from_str(pcs_dao_contract_addr),
+        signer.clone(),
+    );
+    // PCK CRL
+    let root_ca_crl = match X509Crl::from_pem(root_ca_crl.as_bytes()) {
+        Ok(c) => hex::encode(c.to_der().unwrap()),
+        Err(err) => {
+            log::error!("Error parsing certificate: {:?}", err);
+            return false;
+        }
+    };
+    match pcs_dao
+        .upsert_root_ca_crl(Bytes::from_str(&root_ca_crl).unwrap())
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!("txn[upsert_root_ca_crl] receipt: {:?}", receipt);
+                    return true;
+                }
+                Err(err) => {
+                    log::error!("txn[upsert_root_ca_crl] receipt meet error: {:?}", err);
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("txn[upsert_root_ca_crl] meet error: {:?}", err);
+            return false;
+        }
+    }
+}
+
+pub async fn upsert_platform_ca_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    let req_url =
+        format!("https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca=platform",);
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let cert_chains = if response.status().is_success() {
+        let headers = response.headers();
+        if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
+            log::info!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
+            let cert_chain = cert.to_str().unwrap().to_string();
+            let issuer_chains_str = match urlencoding::decode(&cert_chain) {
+                Ok(v) => v,
+                Err(_) => {
+                    log::error!("Invalid UTF-8 in SGX-PCK-CRL-Issuer-Chain");
+                    return false;
+                }
+            };
+            issuer_chains_str.to_string()
+        } else {
+            log::error!(
+                "Cannot find SGX-PCK-CRL-Issuer-Chain in {:?}, exit",
+                req_url
+            );
+            return false;
+        }
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    let cert_chains_str = cert_chains.as_str();
+    let certs_str: Vec<&str> = cert_chains_str.split("-----END CERTIFICATE-----").collect();
+    let mut certs = Vec::new();
+    for cert in certs_str {
+        let current_cert = cert.trim();
+        if current_cert == "\0" {
+            continue;
+        }
+        if !current_cert.is_empty() {
+            let cert_str: String = format!("{}\n-----END CERTIFICATE-----\n", current_cert);
+            match X509::from_pem(&cert_str.as_bytes()) {
+                Ok(cert) => {
+                    certs.push(hex::encode(cert.to_der().unwrap()));
+                }
+                Err(err) => {
+                    log::error!("Error parsing certificate: {:?}", err);
+                    return false;
+                }
+            }
+        }
+    }
+    assert_eq!(certs.len(), 2);
+
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let pcs_dao = PcsDao::new(
+        parse_address_from_str(pcs_dao_contract_addr),
+        signer.clone(),
+    );
+
+    match pcs_dao
+        .upsert_pcs_certificates(CAID::Platform as u8, Bytes::from_str(&certs[0]).unwrap())
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!(
+                "txn[upsert_pcs_certificates][platform] hash: {:?}",
+                pending_tx.tx_hash()
+            );
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!(
+                        "txn[upsert_pcs_certificates][platform] receipt: {:?}",
+                        receipt
+                    );
+                    return true;
+                }
+                Err(err) => {
+                    log::error!(
+                        "txn[upsert_pcs_certificates][platform] receipt meet error: {:?}",
+                        err
+                    );
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "txn[upsert_pcs_certificates][platform] meet error: {:?}",
+                err
+            );
+            return false;
+        }
+    }
+}
+
+pub async fn upsert_platform_ca_crl_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    upsert_platform_processor_ca_crl(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        "platform",
+    )
+    .await
+}
+
+pub async fn upsert_processor_ca_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    let req_url =
+        format!("https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca=processor",);
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let cert_chains = if response.status().is_success() {
+        let headers = response.headers();
+        if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
+            log::info!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
+            let cert_chain = cert.to_str().unwrap().to_string();
+            let issuer_chains_str = match urlencoding::decode(&cert_chain) {
+                Ok(v) => v,
+                Err(_) => {
+                    log::error!("Invalid UTF-8 in SGX-PCK-CRL-Issuer-Chain");
+                    return false;
+                }
+            };
+            issuer_chains_str.to_string()
+        } else {
+            log::error!(
+                "Cannot find SGX-PCK-CRL-Issuer-Chain in {:?}, exit",
+                req_url
+            );
+            return false;
+        }
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    let cert_chains_str = cert_chains.as_str();
+    let certs_str: Vec<&str> = cert_chains_str.split("-----END CERTIFICATE-----").collect();
+    let mut certs = Vec::new();
+    for cert in certs_str {
+        let current_cert = cert.trim();
+        if current_cert == "\0" {
+            continue;
+        }
+        if !current_cert.is_empty() {
+            let cert_str: String = format!("{}\n-----END CERTIFICATE-----\n", current_cert);
+            match X509::from_pem(&cert_str.as_bytes()) {
+                Ok(cert) => {
+                    certs.push(hex::encode(cert.to_der().unwrap()));
+                }
+                Err(err) => {
+                    log::error!("Error parsing certificate: {:?}", err);
+                    return false;
+                }
+            }
+        }
+    }
+    assert_eq!(certs.len(), 2);
+
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let pcs_dao = PcsDao::new(
+        parse_address_from_str(pcs_dao_contract_addr),
+        signer.clone(),
+    );
+
+    match pcs_dao
+        .upsert_pcs_certificates(CAID::Processor as u8, Bytes::from_str(&certs[0]).unwrap())
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!(
+                "txn[upsert_pcs_certificates][processor] hash: {:?}",
+                pending_tx.tx_hash()
+            );
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!(
+                        "txn[upsert_pcs_certificates][processor] receipt: {:?}",
+                        receipt
+                    );
+                    return true;
+                }
+                Err(err) => {
+                    log::error!(
+                        "txn[upsert_pcs_certificates][processor] receipt meet error: {:?}",
+                        err
+                    );
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "txn[upsert_pcs_certificates][processor] meet error: {:?}",
+                err
+            );
+            return false;
+        }
+    }
+}
+
+pub async fn upsert_processor_ca_crl_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    upsert_platform_processor_ca_crl(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        "processor",
+    )
+    .await
+}
+
+pub async fn upsert_tcb_signing_ca_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+) -> bool {
+    // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html#pcs-retrieve-tcbevalnumbers-v4
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/tdx/certification/v4/tcbevaluationdatanumbers",
+    );
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let cert_chains = if response.status().is_success() {
+        let headers = response.headers();
+        if let Some(cert) = headers.get("TCB-Evaluation-Data-Numbers-Issuer-Chain") {
+            log::info!("TCB-Evaluation-Data-Numbers-Issuer-Chain: {:?}", cert);
+            let cert_chain = cert.to_str().unwrap().to_string();
+            let issuer_chains_str = match urlencoding::decode(&cert_chain) {
+                Ok(v) => v,
+                Err(_) => {
+                    log::error!("Invalid UTF-8 in TCB-Evaluation-Data-Numbers-Issuer-Chain");
+                    return false;
+                }
+            };
+            issuer_chains_str.to_string()
+        } else {
+            log::error!(
+                "Cannot find TCB-Evaluation-Data-Numbers-Issuer-Chain in {:?}, exit",
+                req_url
+            );
+            return false;
+        }
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    let cert_chains_str = cert_chains.as_str();
+    let certs_str: Vec<&str> = cert_chains_str.split("-----END CERTIFICATE-----").collect();
+    let mut certs = Vec::new();
+    for cert in certs_str {
+        let current_cert = cert.trim();
+        if current_cert == "\0" {
+            continue;
+        }
+        if !current_cert.is_empty() {
+            let cert_str: String = format!("{}\n-----END CERTIFICATE-----\n", current_cert);
+            match X509::from_pem(&cert_str.as_bytes()) {
+                Ok(cert) => {
+                    certs.push(hex::encode(cert.to_der().unwrap()));
+                }
+                Err(err) => {
+                    log::error!("Error parsing certificate: {:?}", err);
+                    return false;
+                }
+            }
+        }
+    }
+    assert_eq!(certs.len(), 2);
+
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let pcs_dao = PcsDao::new(
+        parse_address_from_str(pcs_dao_contract_addr),
+        signer.clone(),
+    );
+
+    match pcs_dao
+        .upsert_pcs_certificates(CAID::Signing as u8, Bytes::from_str(&certs[0]).unwrap())
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!(
+                "txn[upsert_pcs_certificates][signing] hash: {:?}",
+                pending_tx.tx_hash()
+            );
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!(
+                        "txn[upsert_pcs_certificates][signing] receipt: {:?}",
+                        receipt
+                    );
+                    return true;
+                }
+                Err(err) => {
+                    log::error!(
+                        "txn[upsert_pcs_certificates][signing] receipt meet error: {:?}",
+                        err
+                    );
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "txn[upsert_pcs_certificates][signing] meet error: {:?}",
+                err
+            );
+            return false;
+        }
+    }
+}
+
+pub async fn upsert_enclave_identity_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    platform: &str,                       // "tdx" or "sgx"
+    version: &str,                        // "v3" or "v4" or "v5"
+    collateral_update_type: Option<&str>, // "standard" or "early"
+    tcb_evaluation_data_number: Option<u32>,
+    enclave_identity_dao_contract_addr: &str,
+) -> bool {
+    let mut req_url = format!(
+        "https://api.trustedservices.intel.com/{}/certification/{}/qe/identity",
+        platform, version
+    );
+    if collateral_update_type.is_some() {
+        req_url.push_str(&format!("?update={}", collateral_update_type.unwrap()));
+    } else if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
+        req_url.push_str(&format!(
+            "?tcbEvaluationDataNumber={}",
+            tcb_evaluation_data_number.unwrap()
+        ));
+    }
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    if response.status().is_success() {
+        let qe_identity_str = match response.text().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
+                return false;
+            }
+        };
+        log::info!("QE-Identity: {}", qe_identity_str);
+
+        let provider = Provider::<Http>::try_from(rpc_url).unwrap();
+        let wallet = private_key.parse::<LocalWallet>().unwrap();
+        let signer = Arc::new(SignerMiddleware::new(
+            provider,
+            wallet.with_chain_id(chain_id),
+        ));
+
+        let enclave_identity_dao = EnclaveIdentityDao::new(
+            parse_address_from_str(enclave_identity_dao_contract_addr),
+            signer.clone(),
+        );
+        let enclave_id = if platform == "tdx" {
+            EnclaveID::TD_QE
+        } else if platform == "sgx" {
+            EnclaveID::QE
+        } else {
+            log::error!("Invalid platform: {}", platform);
+            return false;
+        };
+        let id = U256::from(enclave_id as u32);
+        let version = if version == "v3" {
+            U256::from(3u32)
+        } else if version == "v4" {
+            U256::from(4u32)
+        } else if version == "v5" {
+            U256::from(5u32)
+        } else {
+            log::error!("Invalid version: {}", version);
+            return false;
+        };
+        let enclave_identity_str = qe_identity_str.as_str();
+        let enclave_identity: EnclaveIdentity = serde_json::from_str(enclave_identity_str).unwrap();
+        let enclave_identity_str = &enclave_identity_str[r#""enclaveIdentity":{"#.len()..];
+        let end_idx = enclave_identity_str.find(r#","signature""#).unwrap();
+        let enclave_identity_str = &enclave_identity_str[..end_idx];
+        let enclave_identity_obj = EnclaveIdentityJsonObj {
+            identity_str: enclave_identity_str.to_string(),
+            signature: Bytes::from_hex(&enclave_identity.signature).unwrap(),
+        };
+        log::info!("identity_str = {}", enclave_identity_obj.identity_str);
+        log::info!("signature = {}", enclave_identity_obj.signature);
+        match enclave_identity_dao
+            .upsert_enclave_identity(id, version, enclave_identity_obj)
+            .gas_price(gas_price)
+            .send()
+            .await
+        {
+            Ok(pending_tx) => {
+                log::info!(
+                    "txn[upsert_enclave_identity] hash: {:?}",
+                    pending_tx.tx_hash()
+                );
+                match pending_tx.await {
+                    Ok(receipt) => {
+                        log::info!("txn[upsert_enclave_identity] receipt: {:?}", receipt);
+                        return true;
+                    }
+                    Err(err) => {
+                        log::error!("txn[upsert_enclave_identity] receipt meet error: {:?}", err);
+                        return false;
+                    }
+                }
+            }
+            Err(err) => {
+                log::error!("txn[upsert_enclave_identity] meet error: {:?}", err);
+                return false;
+            }
+        }
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+}
+
+async fn upsert_platform_processor_ca_crl(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    ca_type: &str, // "platform" or "processor"
+) -> bool {
+    let req_url = format!(
+        "https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca={}",
+        ca_type,
+    );
+    let response = match reqwest::get(req_url.clone()).await {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Unable to get {}, error = {:?}", req_url, e);
+            return false;
+        }
+    };
+    let pck_crl = if response.status().is_success() {
+        let headers = response.headers();
+        if let Some(cert) = headers.get("SGX-PCK-CRL-Issuer-Chain") {
+            log::info!("SGX-PCK-CRL-Issuer-Chain: {:?}", cert);
+        }
+        let content = match response.text().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
+                return false;
+            }
+        };
+        log::info!("SGX-PCK-CRL: {}", content);
+        content
+    } else {
+        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        return false;
+    };
+    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let pcs_dao = PcsDao::new(
+        parse_address_from_str(pcs_dao_contract_addr),
+        signer.clone(),
+    );
+    // PCK CRL
+    let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {
+        Ok(c) => hex::encode(c.to_der().unwrap()),
+        Err(err) => {
+            log::error!("Error parsing certificate: {:?}", err);
+            return false;
+        }
+    };
+    let ca = if ca_type == "platform" {
+        CAID::Platform as u8
+    } else if ca_type == "processor" {
+        CAID::Processor as u8
+    } else {
+        log::error!("Invalid CA type: {}", ca_type);
+        return false;
+    };
+    match pcs_dao
+        .upsert_pck_crl(ca, Bytes::from_str(&pck_crl).unwrap())
+        .gas_price(gas_price)
+        .send()
+        .await
+    {
+        Ok(pending_tx) => {
+            log::info!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
+            match pending_tx.await {
+                Ok(receipt) => {
+                    log::info!("txn[upsert_pck_crl] receipt: {:?}", receipt);
+                    return true;
+                }
+                Err(err) => {
+                    log::error!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("txn[upsert_pck_crl] meet error: {:?}", err);
+            return false;
         }
     }
 }

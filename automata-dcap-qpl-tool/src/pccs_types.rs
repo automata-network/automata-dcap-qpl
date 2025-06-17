@@ -15,3 +15,10 @@ pub struct TcbInfo {
     pub tcb_info: IndexMap<String, Value>,
     pub signature: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct TcbEvalDataNumber {
+    #[serde(rename = "tcbEvaluationDataNumbers")]
+    pub tcb_evaluation_data_numbers: IndexMap<String, Value>,
+    pub signature: String,
+}

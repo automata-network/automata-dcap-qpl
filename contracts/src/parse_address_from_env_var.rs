@@ -10,3 +10,9 @@ pub fn parse_address_from_env_var(env_var_name: &str) -> Address {
 
     result_address
 }
+
+pub fn parse_address_from_str(addr: &str) -> Address {
+    let addr_str = addr.trim_start_matches("0x").to_string();
+    addr_str.parse::<Address>()
+        .expect(&format!("Unable to parse \"{}\" as address", addr_str))
+}
