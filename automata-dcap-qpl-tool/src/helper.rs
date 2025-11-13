@@ -1324,13 +1324,13 @@ pub async fn upsert_tcb_fmspc_func(
         "https://api.trustedservices.intel.com/{}/certification/{}/tcb?fmspc={}",
         platform, version, fmspc
     );
-    if collateral_update_type.is_some() {
-        req_url.push_str(&format!("&update={}", collateral_update_type.unwrap()));
-    } else if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
+    if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
         req_url.push_str(&format!(
             "&tcbEvaluationDataNumber={}",
             tcb_evaluation_data_number.unwrap()
         ));
+    } else if collateral_update_type.is_some() {
+        req_url.push_str(&format!("&update={}", collateral_update_type.unwrap()));
     }
     log::debug!("req_url: {:?}", req_url);
     let response = match reqwest::get(req_url.clone()).await {
@@ -1978,13 +1978,13 @@ pub async fn upsert_enclave_identity_func(
         "https://api.trustedservices.intel.com/{}/certification/{}/qe/identity",
         platform, version
     );
-    if collateral_update_type.is_some() {
-        req_url.push_str(&format!("?update={}", collateral_update_type.unwrap()));
-    } else if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
+    if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
         req_url.push_str(&format!(
             "?tcbEvaluationDataNumber={}",
             tcb_evaluation_data_number.unwrap()
         ));
+    } else if collateral_update_type.is_some() {
+        req_url.push_str(&format!("?update={}", collateral_update_type.unwrap()));
     }
     let response = match reqwest::get(req_url.clone()).await {
         Ok(v) => v,
