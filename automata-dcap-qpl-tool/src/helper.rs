@@ -17,6 +17,10 @@ use openssl::x509::{X509Crl, X509};
 use reqwest;
 use std::ffi::{c_char, CStr, CString};
 use std::{str::FromStr, sync::Arc};
+use tokio::time::{timeout, Duration};
+
+/// Timeout for waiting for transaction confirmation (2 minutes)
+const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 
 const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
 
@@ -184,12 +188,15 @@ pub fn check_missing_collateral(
                 ) {
                     Ok(pending_tx) => {
                         println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
-                        match rt.block_on(pending_tx) {
-                            Ok(receipt) => {
+                        match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                            Ok(Ok(receipt)) => {
                                 println!("txn[upsert_fmspc_tcb] receipt: {:?}", receipt);
                             }
-                            Err(err) => {
+                            Ok(Err(err)) => {
                                 println!("txn[upsert_fmspc_tcb] receipt meet error: {:?}", err);
+                            }
+                            Err(_) => {
+                                println!("txn[upsert_fmspc_tcb] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                             }
                         }
                     }
@@ -264,12 +271,15 @@ pub fn check_missing_collateral(
                 ) {
                     Ok(pending_tx) => {
                         println!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
-                        match rt.block_on(pending_tx) {
-                            Ok(receipt) => {
+                        match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                            Ok(Ok(receipt)) => {
                                 println!("txn[upsert_pck_crl] receipt: {:?}", receipt);
                             }
-                            Err(err) => {
+                            Ok(Err(err)) => {
                                 println!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                            }
+                            Err(_) => {
+                                println!("txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                             }
                         }
                     }
@@ -1392,13 +1402,17 @@ pub async fn upsert_tcb_fmspc_func(
     {
         Ok(pending_tx) => {
             log::info!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!("txn[upsert_fmspc_tcb] receipt: {:?}", receipt);
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!("txn[upsert_fmspc_tcb] receipt meet error: {:?}", err);
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_fmspc_tcb] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
@@ -1495,16 +1509,20 @@ pub async fn upsert_root_ca_func(
                 "txn[upsert_pcs_certificates][root] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!("txn[upsert_pcs_certificates][root] receipt: {:?}", receipt);
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!(
                         "txn[upsert_pcs_certificates][root] receipt meet error: {:?}",
                         err
                     );
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_pcs_certificates][root] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
@@ -1571,13 +1589,17 @@ pub async fn upsert_root_ca_crl_func(
     {
         Ok(pending_tx) => {
             log::info!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!("txn[upsert_root_ca_crl] receipt: {:?}", receipt);
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!("txn[upsert_root_ca_crl] receipt meet error: {:?}", err);
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_root_ca_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
@@ -1674,19 +1696,23 @@ pub async fn upsert_platform_ca_func(
                 "txn[upsert_pcs_certificates][platform] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!(
                         "txn[upsert_pcs_certificates][platform] receipt: {:?}",
                         receipt
                     );
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!(
                         "txn[upsert_pcs_certificates][platform] receipt meet error: {:?}",
                         err
                     );
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_pcs_certificates][platform] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
@@ -1804,19 +1830,23 @@ pub async fn upsert_processor_ca_func(
                 "txn[upsert_pcs_certificates][processor] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!(
                         "txn[upsert_pcs_certificates][processor] receipt: {:?}",
                         receipt
                     );
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!(
                         "txn[upsert_pcs_certificates][processor] receipt meet error: {:?}",
                         err
                     );
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_pcs_certificates][processor] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
@@ -1936,19 +1966,23 @@ pub async fn upsert_tcb_signing_ca_func(
                 "txn[upsert_pcs_certificates][signing] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!(
                         "txn[upsert_pcs_certificates][signing] receipt: {:?}",
                         receipt
                     );
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!(
                         "txn[upsert_pcs_certificates][signing] receipt meet error: {:?}",
                         err
                     );
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_pcs_certificates][signing] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
@@ -2055,13 +2089,17 @@ pub async fn upsert_enclave_identity_func(
                     "txn[upsert_enclave_identity] hash: {:?}",
                     pending_tx.tx_hash()
                 );
-                match pending_tx.await {
-                    Ok(receipt) => {
+                match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                    Ok(Ok(receipt)) => {
                         log::info!("txn[upsert_enclave_identity] receipt: {:?}", receipt);
                         return true;
                     }
-                    Err(err) => {
+                    Ok(Err(err)) => {
                         log::error!("txn[upsert_enclave_identity] receipt meet error: {:?}", err);
+                        return false;
+                    }
+                    Err(_) => {
+                        log::error!("txn[upsert_enclave_identity] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                         return false;
                     }
                 }
@@ -2148,13 +2186,17 @@ async fn upsert_platform_processor_ca_crl(
     {
         Ok(pending_tx) => {
             log::info!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     log::info!("txn[upsert_pck_crl] receipt: {:?}", receipt);
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     log::error!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }

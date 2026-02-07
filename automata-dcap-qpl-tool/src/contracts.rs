@@ -12,6 +12,10 @@ use ethers::prelude::*;
 use hex::FromHex;
 use openssl::x509::{X509Crl, X509};
 use std::{str::FromStr, sync::Arc};
+use tokio::time::{timeout, Duration};
+
+/// Timeout for waiting for transaction confirmation (2 minutes)
+const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 
 lazy_static::lazy_static! {
     pub static ref GAS_PRICE: String = {
@@ -83,15 +87,18 @@ pub fn upsert_pck_cert(
                 "txn[upsert_pcs_certificates][root] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_pcs_certificates][root] receipt: {:?}", receipt);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!(
                         "txn[upsert_pcs_certificates][root] receipt meet error: {:?}",
                         err
                     );
+                }
+                Err(_) => {
+                    println!("txn[upsert_pcs_certificates][root] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -109,18 +116,21 @@ pub fn upsert_pck_cert(
                 "txn[upsert_pcs_certificates][intermediate] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!(
                         "txn[upsert_pcs_certificates][intermediate] receipt: {:?}",
                         receipt
                     );
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!(
                         "txn[upsert_pcs_certificates][intermediate] receipt meet error: {:?}",
                         err
                     );
+                }
+                Err(_) => {
+                    println!("txn[upsert_pcs_certificates][intermediate] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -144,12 +154,15 @@ pub fn upsert_pck_cert(
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_pck_cert] hash: {:?}", pending_tx.tx_hash());
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_pck_cert] receipt: {:?}", receipt);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("txn[upsert_pck_cert] receipt meet error: {:?}", err);
+                }
+                Err(_) => {
+                    println!("txn[upsert_pck_cert] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -164,12 +177,15 @@ pub fn upsert_pck_cert(
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_platform_tcbs] hash: {:?}", pending_tx.tx_hash());
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_platform_tcbs] receipt: {:?}", receipt);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("txn[upsert_platform_tcbs] receipt meet error: {:?}", err);
+                }
+                Err(_) => {
+                    println!("txn[upsert_platform_tcbs] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -238,11 +254,14 @@ pub fn upsert_enclave_identity(
                 "txn[upsert_pcs_certificates][root] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_pcs_certificates][root] receipt: {:?}", receipt);
                 }
-                Err(_) => {}
+                Ok(Err(_)) => {}
+                Err(_) => {
+                    println!("txn[upsert_pcs_certificates][root] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                }
             }
         }
         Err(_) => {}
@@ -257,15 +276,18 @@ pub fn upsert_enclave_identity(
                 "txn[upsert_pcs_certificates][signing] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!(
                         "txn[upsert_pcs_certificates][signing] receipt: {:?}",
                         receipt
                     );
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("Error: {:?}", err);
+                }
+                Err(_) => {
+                    println!("txn[upsert_pcs_certificates][signing] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -308,12 +330,15 @@ pub fn upsert_enclave_identity(
                 "txn[upsert_enclave_identity] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_enclave_identity] receipt: {:?}", receipt);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("txn[upsert_enclave_identity] receipt meet error: {:?}", err);
+                }
+                Err(_) => {
+                    println!("txn[upsert_enclave_identity] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -350,12 +375,15 @@ pub fn upsert_root_ca_crl(prv_key: &str, rpc_url: String, chain_id: u64, crl: &s
     ) {
         Ok(pending_tx) => {
             println!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_root_ca_crl] receipt: {:?}", receipt);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("txn[upsert_root_ca_crl] receipt meet error: {:?}", err);
+                }
+                Err(_) => {
+                    println!("txn[upsert_root_ca_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -420,12 +448,15 @@ pub fn update_verification_collateral(
         ) {
             Ok(pending_tx) => {
                 println!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
-                match rt.block_on(pending_tx) {
-                    Ok(receipt) => {
+                match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                    Ok(Ok(receipt)) => {
                         println!("txn[upsert_pck_crl] receipt: {:?}", receipt);
                     }
-                    Err(err) => {
+                    Ok(Err(err)) => {
                         println!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                    }
+                    Err(_) => {
+                        println!("txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     }
                 }
             }
@@ -451,12 +482,15 @@ pub fn update_verification_collateral(
     match rt.block_on(fmspc_tcb_dao.upsert_fmspc_tcb(tcb_info_obj).gas_price(U256::from_str_radix(&GAS_PRICE, 10).unwrap()).send()) {
         Ok(pending_tx) => {
             println!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
-            match rt.block_on(pending_tx) {
-                Ok(receipt) => {
+            match rt.block_on(timeout(TX_CONFIRMATION_TIMEOUT, pending_tx)) {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_fmspc_tcb] receipt: {:?}", receipt);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("txn[upsert_fmspc_tcb] receipt meet error: {:?}", err);
+                }
+                Err(_) => {
+                    println!("txn[upsert_fmspc_tcb] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                 }
             }
         }
@@ -515,13 +549,17 @@ pub async fn upsert_tcb_eval_data_number(
                 "txn[upsert_tcb_evaluation_data] hash: {:?}",
                 pending_tx.tx_hash()
             );
-            match pending_tx.await {
-                Ok(receipt) => {
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
                     println!("txn[upsert_tcb_evaluation_data] receipt: {:?}", receipt);
                     return true;
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     println!("txn[upsert_tcb_evaluation_data] receipt meet error: {:?}", err);
+                    return false;
+                }
+                Err(_) => {
+                    println!("txn[upsert_tcb_evaluation_data] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
