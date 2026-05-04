@@ -523,6 +523,7 @@ pub async fn upsert_tcb_eval_data_number(
     tcb_eval_data_number_dao: &str,
     tcb_eval_data_number_str: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, tcb_eval_data_number_dao);
     let provider = Provider::<Http>::try_from(rpc_url).unwrap();
     let wallet = prv_key.parse::<LocalWallet>().unwrap();
     let signer = Arc::new(SignerMiddleware::new(
@@ -540,14 +541,15 @@ pub async fn upsert_tcb_eval_data_number(
         tcb_evaluation_data_numbers: tcb_eval_data_number_str.to_string(),
         signature: Bytes::from_hex(&tcb_eval_data_number.signature).unwrap(),
     };
-    println!("tcb_evaluation_data_numbers = {}", tcb_eval_data_number_obj.tcb_evaluation_data_numbers);
-    println!("signature = {}", tcb_eval_data_number_obj.signature);
+    println!("{} tcb_evaluation_data_numbers = {}", log_prefix, tcb_eval_data_number_obj.tcb_evaluation_data_numbers);
+    println!("{} signature = {}", log_prefix, tcb_eval_data_number_obj.signature);
     let call = tcb_eval_dao
         .upsert_tcb_evaluation_data(tcb_eval_data_number_obj)
         .gas_price(gas_price);
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_tcb_evaluation_data",
     )
     .await
@@ -558,26 +560,27 @@ pub async fn upsert_tcb_eval_data_number(
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             println!(
-                "txn[upsert_tcb_evaluation_data] hash: {:?}",
+                "{} txn[upsert_tcb_evaluation_data] hash: {:?}",
+                log_prefix,
                 pending_tx.tx_hash()
             );
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
-                    println!("txn[upsert_tcb_evaluation_data] receipt: {:?}", receipt);
+                    println!("{} txn[upsert_tcb_evaluation_data] receipt: {:?}", log_prefix, receipt);
                     return true;
                 }
                 Ok(Err(err)) => {
-                    println!("txn[upsert_tcb_evaluation_data] receipt meet error: {:?}", err);
+                    println!("{} txn[upsert_tcb_evaluation_data] receipt meet error: {:?}", log_prefix, err);
                     return false;
                 }
                 Err(_) => {
-                    println!("txn[upsert_tcb_evaluation_data] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    println!("{} txn[upsert_tcb_evaluation_data] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
-            println!("txn[upsert_tcb_evaluation_data] meet error: {:?}", err);
+            println!("{} txn[upsert_tcb_evaluation_data] meet error: {:?}", log_prefix, err);
             return false;
         }
     }

@@ -33,6 +33,7 @@ const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 pub async fn estimate_gas_at_latest<M: Middleware>(
     signer: &M,
     tx: &TypedTransaction,
+    log_prefix: &str,
     label: &str,
 ) -> Option<U256>
 where
@@ -43,7 +44,8 @@ where
         Ok(v) => Some(v.saturating_mul(U256::from(130)) / U256::from(100)),
         Err(err) => {
             log::error!(
-                "txn[{}] estimate_gas at latest failed: {:?}",
+                "{} txn[{}] estimate_gas at latest failed: {:?}",
+                log_prefix,
                 label,
                 err
             );
@@ -1360,6 +1362,7 @@ pub async fn upsert_tcb_fmspc_func(
     tcb_evaluation_data_number: Option<u32>,
     fmspc_tcb_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, fmspc_tcb_dao_contract_addr);
     let mut req_url = format!(
         "https://api.trustedservices.intel.com/{}/certification/{}/tcb?fmspc={}",
         platform, version, fmspc
@@ -1430,6 +1433,7 @@ pub async fn upsert_tcb_fmspc_func(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_fmspc_tcb",
     )
     .await
@@ -1439,24 +1443,24 @@ pub async fn upsert_tcb_fmspc_func(
     };
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
-            log::info!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
+            log::info!("{} txn[upsert_fmspc_tcb] hash: {:?}", log_prefix, pending_tx.tx_hash());
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
-                    log::info!("txn[upsert_fmspc_tcb] receipt: {:?}", receipt);
+                    log::info!("{} txn[upsert_fmspc_tcb] receipt: {:?}", log_prefix, receipt);
                     return true;
                 }
                 Ok(Err(err)) => {
-                    log::error!("txn[upsert_fmspc_tcb] receipt meet error: {:?}", err);
+                    log::error!("{} txn[upsert_fmspc_tcb] receipt meet error: {:?}", log_prefix, err);
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_fmspc_tcb] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_fmspc_tcb] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
-            log::error!("txn[upsert_fmspc_tcb] meet error: {:?}", err);
+            log::error!("{} txn[upsert_fmspc_tcb] meet error: {:?}", log_prefix, err);
             return false;
         }
     }
@@ -1469,6 +1473,7 @@ pub async fn upsert_root_ca_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
     let req_url =
         format!("https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca=platform",);
     let response = match reqwest::get(req_url.clone()).await {
@@ -1542,6 +1547,7 @@ pub async fn upsert_root_ca_func(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_pcs_certificates][root",
     )
     .await
@@ -1552,29 +1558,31 @@ pub async fn upsert_root_ca_func(
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
-                "txn[upsert_pcs_certificates][root] hash: {:?}",
+                "{} txn[upsert_pcs_certificates][root] hash: {:?}",
+                log_prefix,
                 pending_tx.tx_hash()
             );
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
-                    log::info!("txn[upsert_pcs_certificates][root] receipt: {:?}", receipt);
+                    log::info!("{} txn[upsert_pcs_certificates][root] receipt: {:?}", log_prefix, receipt);
                     return true;
                 }
                 Ok(Err(err)) => {
                     log::error!(
-                        "txn[upsert_pcs_certificates][root] receipt meet error: {:?}",
+                        "{} txn[upsert_pcs_certificates][root] receipt meet error: {:?}",
+                        log_prefix,
                         err
                     );
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_pcs_certificates][root] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_pcs_certificates][root] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
-            log::error!("txn[upsert_pcs_certificates][root] meet error: {:?}", err);
+            log::error!("{} txn[upsert_pcs_certificates][root] meet error: {:?}", log_prefix, err);
             return false;
         }
     }
@@ -1587,6 +1595,7 @@ pub async fn upsert_root_ca_crl_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
     let req_url = format!("https://certificates.trustedservices.intel.com/IntelSGXRootCA.crl",);
     let response = match reqwest::get(req_url.clone()).await {
         Ok(v) => v,
@@ -1633,6 +1642,7 @@ pub async fn upsert_root_ca_crl_func(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_root_ca_crl",
     )
     .await
@@ -1642,24 +1652,24 @@ pub async fn upsert_root_ca_crl_func(
     };
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
-            log::info!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
+            log::info!("{} txn[upsert_root_ca_crl] hash: {:?}", log_prefix, pending_tx.tx_hash());
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
-                    log::info!("txn[upsert_root_ca_crl] receipt: {:?}", receipt);
+                    log::info!("{} txn[upsert_root_ca_crl] receipt: {:?}", log_prefix, receipt);
                     return true;
                 }
                 Ok(Err(err)) => {
-                    log::error!("txn[upsert_root_ca_crl] receipt meet error: {:?}", err);
+                    log::error!("{} txn[upsert_root_ca_crl] receipt meet error: {:?}", log_prefix, err);
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_root_ca_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_root_ca_crl] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
-            log::error!("txn[upsert_root_ca_crl] meet error: {:?}", err);
+            log::error!("{} txn[upsert_root_ca_crl] meet error: {:?}", log_prefix, err);
             return false;
         }
     }
@@ -1672,6 +1682,7 @@ pub async fn upsert_platform_ca_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
     let req_url =
         format!("https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca=platform",);
     let response = match reqwest::get(req_url.clone()).await {
@@ -1745,6 +1756,7 @@ pub async fn upsert_platform_ca_func(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_pcs_certificates][platform",
     )
     .await
@@ -1755,33 +1767,37 @@ pub async fn upsert_platform_ca_func(
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
-                "txn[upsert_pcs_certificates][platform] hash: {:?}",
+                "{} txn[upsert_pcs_certificates][platform] hash: {:?}",
+                log_prefix,
                 pending_tx.tx_hash()
             );
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
                     log::info!(
-                        "txn[upsert_pcs_certificates][platform] receipt: {:?}",
+                        "{} txn[upsert_pcs_certificates][platform] receipt: {:?}",
+                        log_prefix,
                         receipt
                     );
                     return true;
                 }
                 Ok(Err(err)) => {
                     log::error!(
-                        "txn[upsert_pcs_certificates][platform] receipt meet error: {:?}",
+                        "{} txn[upsert_pcs_certificates][platform] receipt meet error: {:?}",
+                        log_prefix,
                         err
                     );
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_pcs_certificates][platform] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_pcs_certificates][platform] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
             log::error!(
-                "txn[upsert_pcs_certificates][platform] meet error: {:?}",
+                "{} txn[upsert_pcs_certificates][platform] meet error: {:?}",
+                log_prefix,
                 err
             );
             return false;
@@ -1814,6 +1830,7 @@ pub async fn upsert_processor_ca_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
     let req_url =
         format!("https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca=processor",);
     let response = match reqwest::get(req_url.clone()).await {
@@ -1887,6 +1904,7 @@ pub async fn upsert_processor_ca_func(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_pcs_certificates][processor",
     )
     .await
@@ -1897,33 +1915,37 @@ pub async fn upsert_processor_ca_func(
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
-                "txn[upsert_pcs_certificates][processor] hash: {:?}",
+                "{} txn[upsert_pcs_certificates][processor] hash: {:?}",
+                log_prefix,
                 pending_tx.tx_hash()
             );
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
                     log::info!(
-                        "txn[upsert_pcs_certificates][processor] receipt: {:?}",
+                        "{} txn[upsert_pcs_certificates][processor] receipt: {:?}",
+                        log_prefix,
                         receipt
                     );
                     return true;
                 }
                 Ok(Err(err)) => {
                     log::error!(
-                        "txn[upsert_pcs_certificates][processor] receipt meet error: {:?}",
+                        "{} txn[upsert_pcs_certificates][processor] receipt meet error: {:?}",
+                        log_prefix,
                         err
                     );
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_pcs_certificates][processor] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_pcs_certificates][processor] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
             log::error!(
-                "txn[upsert_pcs_certificates][processor] meet error: {:?}",
+                "{} txn[upsert_pcs_certificates][processor] meet error: {:?}",
+                log_prefix,
                 err
             );
             return false;
@@ -1956,6 +1978,7 @@ pub async fn upsert_tcb_signing_ca_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
     // Ref: https://api.portal.trustedservices.intel.com/content/documentation.html#pcs-retrieve-tcbevalnumbers-v4
     let req_url = format!(
         "https://api.trustedservices.intel.com/tdx/certification/v4/tcbevaluationdatanumbers",
@@ -2031,6 +2054,7 @@ pub async fn upsert_tcb_signing_ca_func(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_pcs_certificates][signing",
     )
     .await
@@ -2041,33 +2065,37 @@ pub async fn upsert_tcb_signing_ca_func(
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
-                "txn[upsert_pcs_certificates][signing] hash: {:?}",
+                "{} txn[upsert_pcs_certificates][signing] hash: {:?}",
+                log_prefix,
                 pending_tx.tx_hash()
             );
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
                     log::info!(
-                        "txn[upsert_pcs_certificates][signing] receipt: {:?}",
+                        "{} txn[upsert_pcs_certificates][signing] receipt: {:?}",
+                        log_prefix,
                         receipt
                     );
                     return true;
                 }
                 Ok(Err(err)) => {
                     log::error!(
-                        "txn[upsert_pcs_certificates][signing] receipt meet error: {:?}",
+                        "{} txn[upsert_pcs_certificates][signing] receipt meet error: {:?}",
+                        log_prefix,
                         err
                     );
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_pcs_certificates][signing] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_pcs_certificates][signing] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
             log::error!(
-                "txn[upsert_pcs_certificates][signing] meet error: {:?}",
+                "{} txn[upsert_pcs_certificates][signing] meet error: {:?}",
+                log_prefix,
                 err
             );
             return false;
@@ -2086,6 +2114,7 @@ pub async fn upsert_enclave_identity_func(
     tcb_evaluation_data_number: Option<u32>,
     enclave_identity_dao_contract_addr: &str,
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, enclave_identity_dao_contract_addr);
     let mut req_url = format!(
         "https://api.trustedservices.intel.com/{}/certification/{}/qe/identity",
         platform, version
@@ -2162,6 +2191,7 @@ pub async fn upsert_enclave_identity_func(
         let gas_with_buf = match estimate_gas_at_latest(
             signer.as_ref(),
             &call.tx,
+            &log_prefix,
             "upsert_enclave_identity",
         )
         .await
@@ -2172,26 +2202,27 @@ pub async fn upsert_enclave_identity_func(
         match call.gas(gas_with_buf).send().await {
             Ok(pending_tx) => {
                 log::info!(
-                    "txn[upsert_enclave_identity] hash: {:?}",
+                    "{} txn[upsert_enclave_identity] hash: {:?}",
+                    log_prefix,
                     pending_tx.tx_hash()
                 );
                 match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                     Ok(Ok(receipt)) => {
-                        log::info!("txn[upsert_enclave_identity] receipt: {:?}", receipt);
+                        log::info!("{} txn[upsert_enclave_identity] receipt: {:?}", log_prefix, receipt);
                         return true;
                     }
                     Ok(Err(err)) => {
-                        log::error!("txn[upsert_enclave_identity] receipt meet error: {:?}", err);
+                        log::error!("{} txn[upsert_enclave_identity] receipt meet error: {:?}", log_prefix, err);
                         return false;
                     }
                     Err(_) => {
-                        log::error!("txn[upsert_enclave_identity] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                        log::error!("{} txn[upsert_enclave_identity] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                         return false;
                     }
                 }
             }
             Err(err) => {
-                log::error!("txn[upsert_enclave_identity] meet error: {:?}", err);
+                log::error!("{} txn[upsert_enclave_identity] meet error: {:?}", log_prefix, err);
                 return false;
             }
         }
@@ -2209,6 +2240,7 @@ async fn upsert_platform_processor_ca_crl(
     pcs_dao_contract_addr: &str,
     ca_type: &str, // "platform" or "processor"
 ) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
     let req_url = format!(
         "https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca={}",
         ca_type,
@@ -2270,6 +2302,7 @@ async fn upsert_platform_processor_ca_crl(
     let gas_with_buf = match estimate_gas_at_latest(
         signer.as_ref(),
         &call.tx,
+        &log_prefix,
         "upsert_pck_crl",
     )
     .await
@@ -2279,24 +2312,24 @@ async fn upsert_platform_processor_ca_crl(
     };
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
-            log::info!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
+            log::info!("{} txn[upsert_pck_crl] hash: {:?}", log_prefix, pending_tx.tx_hash());
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
-                    log::info!("txn[upsert_pck_crl] receipt: {:?}", receipt);
+                    log::info!("{} txn[upsert_pck_crl] receipt: {:?}", log_prefix, receipt);
                     return true;
                 }
                 Ok(Err(err)) => {
-                    log::error!("txn[upsert_pck_crl] receipt meet error: {:?}", err);
+                    log::error!("{} txn[upsert_pck_crl] receipt meet error: {:?}", log_prefix, err);
                     return false;
                 }
                 Err(_) => {
-                    log::error!("txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", TX_CONFIRMATION_TIMEOUT);
+                    log::error!("{} txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
                     return false;
                 }
             }
         }
         Err(err) => {
-            log::error!("txn[upsert_pck_crl] meet error: {:?}", err);
+            log::error!("{} txn[upsert_pck_crl] meet error: {:?}", log_prefix, err);
             return false;
         }
     }
