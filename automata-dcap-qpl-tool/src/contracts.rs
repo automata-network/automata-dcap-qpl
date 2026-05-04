@@ -14,6 +14,8 @@ use openssl::x509::{X509Crl, X509};
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{timeout, Duration};
 
+use crate::helper::estimate_gas_at_latest;
+
 /// Timeout for waiting for transaction confirmation (2 minutes)
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -540,10 +542,20 @@ pub async fn upsert_tcb_eval_data_number(
     };
     println!("tcb_evaluation_data_numbers = {}", tcb_eval_data_number_obj.tcb_evaluation_data_numbers);
     println!("signature = {}", tcb_eval_data_number_obj.signature);
-    match tcb_eval_dao
-            .upsert_tcb_evaluation_data(tcb_eval_data_number_obj)
-            .gas_price(gas_price).send().await
+    let call = tcb_eval_dao
+        .upsert_tcb_evaluation_data(tcb_eval_data_number_obj)
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_tcb_evaluation_data",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             println!(
                 "txn[upsert_tcb_evaluation_data] hash: {:?}",

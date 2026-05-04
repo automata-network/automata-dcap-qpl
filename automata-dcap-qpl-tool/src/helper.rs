@@ -10,6 +10,7 @@ use automata_dcap_qpl_contracts::{
     pcs_dao::PcsDao,
 };
 use ethers::prelude::*;
+use ethers::types::transaction::eip2718::TypedTransaction;
 use hex::FromHex;
 use pccs_reader_rs::*;
 
@@ -21,6 +22,35 @@ use tokio::time::{timeout, Duration};
 
 /// Timeout for waiting for transaction confirmation (2 minutes)
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Estimate gas against the `latest` block and return the value with a 30%
+/// buffer. The default ethers-rs `fill_transaction` flow estimates against
+/// the `pending` block; on Cosmos-EVM chains (e.g. Story 1315 / 1514) a
+/// previously stuck pending tx pollutes that state and idempotency-checked
+/// upserts revert with empty bytes. Estimating against `latest` avoids that.
+/// Returning `None` means the call would also revert against `latest`, so
+/// callers should skip the actual `send` to avoid wasted attempts.
+pub async fn estimate_gas_at_latest<M: Middleware>(
+    signer: &M,
+    tx: &TypedTransaction,
+    label: &str,
+) -> Option<U256>
+where
+    M::Error: 'static,
+{
+    let block = Some(BlockId::Number(BlockNumber::Latest));
+    match signer.estimate_gas(tx, block).await {
+        Ok(v) => Some(v.saturating_mul(U256::from(130)) / U256::from(100)),
+        Err(err) => {
+            log::error!(
+                "txn[{}] estimate_gas at latest failed: {:?}",
+                label,
+                err
+            );
+            None
+        }
+    }
+}
 
 const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
 
@@ -1394,12 +1424,20 @@ pub async fn upsert_tcb_fmspc_func(
         parse_address_from_str(fmspc_tcb_dao_contract_addr),
         signer.clone(),
     );
-    match fmspc_tcb_dao
+    let call = fmspc_tcb_dao
         .upsert_fmspc_tcb(tcb_info_obj)
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_fmspc_tcb",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!("txn[upsert_fmspc_tcb] hash: {:?}", pending_tx.tx_hash());
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
@@ -1498,12 +1536,20 @@ pub async fn upsert_root_ca_func(
         signer.clone(),
     );
 
-    match pcs_dao
+    let call = pcs_dao
         .upsert_pcs_certificates(CAID::Root as u8, Bytes::from_str(&certs[1]).unwrap())
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_pcs_certificates][root",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
                 "txn[upsert_pcs_certificates][root] hash: {:?}",
@@ -1581,12 +1627,20 @@ pub async fn upsert_root_ca_crl_func(
             return false;
         }
     };
-    match pcs_dao
+    let call = pcs_dao
         .upsert_root_ca_crl(Bytes::from_str(&root_ca_crl).unwrap())
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_root_ca_crl",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!("txn[upsert_root_ca_crl] hash: {:?}", pending_tx.tx_hash());
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
@@ -1685,12 +1739,20 @@ pub async fn upsert_platform_ca_func(
         signer.clone(),
     );
 
-    match pcs_dao
+    let call = pcs_dao
         .upsert_pcs_certificates(CAID::Platform as u8, Bytes::from_str(&certs[0]).unwrap())
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_pcs_certificates][platform",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
                 "txn[upsert_pcs_certificates][platform] hash: {:?}",
@@ -1819,12 +1881,20 @@ pub async fn upsert_processor_ca_func(
         signer.clone(),
     );
 
-    match pcs_dao
+    let call = pcs_dao
         .upsert_pcs_certificates(CAID::Processor as u8, Bytes::from_str(&certs[0]).unwrap())
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_pcs_certificates][processor",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
                 "txn[upsert_pcs_certificates][processor] hash: {:?}",
@@ -1955,12 +2025,20 @@ pub async fn upsert_tcb_signing_ca_func(
         signer.clone(),
     );
 
-    match pcs_dao
+    let call = pcs_dao
         .upsert_pcs_certificates(CAID::Signing as u8, Bytes::from_str(&certs[0]).unwrap())
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_pcs_certificates][signing",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!(
                 "txn[upsert_pcs_certificates][signing] hash: {:?}",
@@ -2078,12 +2156,20 @@ pub async fn upsert_enclave_identity_func(
         };
         log::info!("identity_str = {}", enclave_identity_obj.identity_str);
         log::info!("signature = {}", enclave_identity_obj.signature);
-        match enclave_identity_dao
+        let call = enclave_identity_dao
             .upsert_enclave_identity(id, version, enclave_identity_obj)
-            .gas_price(gas_price)
-            .send()
-            .await
+            .gas_price(gas_price);
+        let gas_with_buf = match estimate_gas_at_latest(
+            signer.as_ref(),
+            &call.tx,
+            "upsert_enclave_identity",
+        )
+        .await
         {
+            Some(g) => g,
+            None => return false,
+        };
+        match call.gas(gas_with_buf).send().await {
             Ok(pending_tx) => {
                 log::info!(
                     "txn[upsert_enclave_identity] hash: {:?}",
@@ -2178,12 +2264,20 @@ async fn upsert_platform_processor_ca_crl(
         log::error!("Invalid CA type: {}", ca_type);
         return false;
     };
-    match pcs_dao
+    let call = pcs_dao
         .upsert_pck_crl(ca, Bytes::from_str(&pck_crl).unwrap())
-        .gas_price(gas_price)
-        .send()
-        .await
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        "upsert_pck_crl",
+    )
+    .await
     {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
             log::info!("txn[upsert_pck_crl] hash: {:?}", pending_tx.tx_hash());
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
