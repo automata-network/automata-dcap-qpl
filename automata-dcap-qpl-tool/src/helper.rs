@@ -1,3 +1,6 @@
+#[path = "helper/tcb_fmspc_async.rs"]
+mod tcb_fmspc_async;
+
 use crate::cloud_providers::*;
 use crate::contracts::*;
 use crate::pccs_types::*;
@@ -19,6 +22,9 @@ use reqwest;
 use std::ffi::{c_char, CStr, CString};
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{timeout, Duration};
+
+#[allow(unused_imports)]
+pub use tcb_fmspc_async::upsert_tcb_fmspc_func;
 
 /// Timeout for waiting for transaction confirmation (2 minutes)
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1347,122 +1353,6 @@ pub async fn upsert_tcb_eval_data_number_func(
     } else {
         log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
         return false;
-    }
-}
-
-pub async fn upsert_tcb_fmspc_func(
-    private_key: String,
-    rpc_url: String,
-    chain_id: u64,
-    gas_price: U256,
-    fmspc: &str,
-    platform: &str,                       // "tdx" or "sgx"
-    version: &str,                        // "v3" or "v4" or "v5"
-    collateral_update_type: Option<&str>, // "standard" or "early"
-    tcb_evaluation_data_number: Option<u32>,
-    fmspc_tcb_dao_contract_addr: &str,
-) -> bool {
-    let log_prefix = format!("[{}][{}]", chain_id, fmspc_tcb_dao_contract_addr);
-    let mut req_url = format!(
-        "https://api.trustedservices.intel.com/{}/certification/{}/tcb?fmspc={}",
-        platform, version, fmspc
-    );
-    if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
-        req_url.push_str(&format!(
-            "&tcbEvaluationDataNumber={}",
-            tcb_evaluation_data_number.unwrap()
-        ));
-    } else if collateral_update_type.is_some() {
-        req_url.push_str(&format!("&update={}", collateral_update_type.unwrap()));
-    }
-    log::debug!("req_url: {:?}", req_url);
-    let response = match reqwest::get(req_url.clone()).await {
-        Ok(v) => v,
-        Err(e) => {
-            log::error!("Unable to get {}, error = {:?}", req_url, e);
-            return false;
-        }
-    };
-    let tcb_info_str = if response.status().is_success() {
-        let headers = response.headers();
-        // v3
-        if let Some(cert) = headers.get("SGX-TCB-Info-Issuer-Chain") {
-            log::info!("SGX-TCB-Info-Issuer-Chain: {:?}", cert);
-        }
-        // v4
-        if let Some(cert) = headers.get("TCB-Info-Issuer-Chain") {
-            log::info!("TCB-Info-Issuer-Chain: {:?}", cert);
-        }
-        let content = match response.text().await {
-            Ok(v) => v,
-            Err(e) => {
-                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
-                return false;
-            }
-        };
-        log::info!("TCB-Info: {}", content);
-        content
-    } else {
-        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
-        return false;
-    };
-    // TCB Info
-    let tcb_info: TcbInfo = serde_json::from_str(&tcb_info_str).unwrap();
-    let tcb_info_str = &tcb_info_str[r#""tcbInfo":{"#.len()..];
-    let end_idx = tcb_info_str.find(r#","signature""#).unwrap();
-    let tcb_info_str = &tcb_info_str[..end_idx];
-    let tcb_info_obj = TcbInfoJsonObj {
-        tcb_info_str: tcb_info_str.to_string(),
-        signature: Bytes::from_hex(tcb_info.signature).unwrap(),
-    };
-    log::info!("tcb_info_obj.tcb_info_str: {}", tcb_info_obj.tcb_info_str);
-    log::info!("tcb_info_obj.signature: {:?}", tcb_info_obj.signature);
-    let provider = Provider::<Http>::try_from(rpc_url.clone()).unwrap();
-    let wallet = private_key.parse::<LocalWallet>().unwrap();
-    let signer = Arc::new(SignerMiddleware::new(
-        provider,
-        wallet.with_chain_id(chain_id),
-    ));
-    let fmspc_tcb_dao = FmspcTcbDao::new(
-        parse_address_from_str(fmspc_tcb_dao_contract_addr),
-        signer.clone(),
-    );
-    let call = fmspc_tcb_dao
-        .upsert_fmspc_tcb(tcb_info_obj)
-        .gas_price(gas_price);
-    let gas_with_buf = match estimate_gas_at_latest(
-        signer.as_ref(),
-        &call.tx,
-        &log_prefix,
-        "upsert_fmspc_tcb",
-    )
-    .await
-    {
-        Some(g) => g,
-        None => return false,
-    };
-    match call.gas(gas_with_buf).send().await {
-        Ok(pending_tx) => {
-            log::info!("{} txn[upsert_fmspc_tcb] hash: {:?}", log_prefix, pending_tx.tx_hash());
-            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
-                Ok(Ok(receipt)) => {
-                    log::info!("{} txn[upsert_fmspc_tcb] receipt: {:?}", log_prefix, receipt);
-                    return true;
-                }
-                Ok(Err(err)) => {
-                    log::error!("{} txn[upsert_fmspc_tcb] receipt meet error: {:?}", log_prefix, err);
-                    return false;
-                }
-                Err(_) => {
-                    log::error!("{} txn[upsert_fmspc_tcb] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
-                    return false;
-                }
-            }
-        }
-        Err(err) => {
-            log::error!("{} txn[upsert_fmspc_tcb] meet error: {:?}", log_prefix, err);
-            return false;
-        }
     }
 }
 

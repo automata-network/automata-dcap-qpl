@@ -49,6 +49,12 @@ struct Opt {
         help = "Default: Automata Testnet Chain ID"
     )]
     chain_id: u64,
+    #[structopt(
+        long = "gas_price",
+        default_value = "1",
+        help = "Gas price in wei for tx-sending helper flows"
+    )]
+    gas_price: String,
 
     // advanced usage
     #[structopt(
@@ -120,9 +126,40 @@ struct Opt {
         help = "Default: Automata Testnet Chain ID"
     )]
     all_verification_collateral: u64,
+    #[structopt(
+        long = "fmspc_tcb_dao_contract_addr",
+        default_value = "",
+        help = "Target FMSPC TCB DAO V2 contract address for async upsert"
+    )]
+    fmspc_tcb_dao_contract_addr: String,
+    #[structopt(
+        long = "tcb_info_json_file",
+        default_value = "",
+        help = "Optional local TCB info JSON file used by upsert_tcb_fmspc_async"
+    )]
+    tcb_info_json_file: String,
+    #[structopt(
+        long = "tcb_info_signature_hex",
+        default_value = "",
+        help = "Optional signature hex for local TCB info JSON; if omitted, a sibling *_signature.txt file is inferred"
+    )]
+    tcb_info_signature_hex: String,
+    #[structopt(
+        long = "tcb_evaluation_data_number",
+        default_value = "0",
+        help = "Optional TCB evaluation data number used by upsert_tcb_fmspc_async when fetching collateral from Intel PCS"
+    )]
+    tcb_evaluation_data_number: u32,
+    #[structopt(
+        long = "collateral_update_type",
+        default_value = "",
+        help = "Optional update type used by upsert_tcb_fmspc_async when fetching collateral from Intel PCS, e.g. standard or early"
+    )]
+    collateral_update_type: String,
 }
 
 fn main() {
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).try_init();
     let opt = Opt::from_args();
     let data_source = if opt.source == "Local".to_string() {
         DataSource::Local
@@ -248,5 +285,36 @@ fn main() {
             opt.version,
             opt.pccs_url,
         );
+    } else if opt.func == "upsert_tcb_fmspc_async".to_string() {
+        if opt.private_key.is_empty() {
+            println!("private_key is required for upsert_tcb_fmspc_async");
+            return;
+        }
+        if opt.fmspc_tcb_dao_contract_addr.is_empty() {
+            println!("fmspc_tcb_dao_contract_addr is required for upsert_tcb_fmspc_async");
+            return;
+        }
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let ok = rt.block_on(helper::upsert_tcb_fmspc_func(
+            opt.private_key,
+            opt.rpc_url,
+            opt.chain_id,
+            ethers::types::U256::from_dec_str(&opt.gas_price).expect("invalid gas_price"),
+            &opt.fmspc,
+            "sgx",
+            &opt.version,
+            (!opt.collateral_update_type.is_empty()).then_some(opt.collateral_update_type.as_str()),
+            (opt.tcb_evaluation_data_number > 0).then_some(opt.tcb_evaluation_data_number),
+            &opt.fmspc_tcb_dao_contract_addr,
+            (!opt.tcb_info_json_file.is_empty()).then_some(opt.tcb_info_json_file.as_str()),
+            (!opt.tcb_info_signature_hex.is_empty()).then_some(opt.tcb_info_signature_hex.as_str()),
+        ));
+        if !ok {
+            std::process::exit(1);
+        }
     }
 }

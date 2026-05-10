@@ -24,3 +24,4 @@ indexmap = {version = "2.0.0", features = ["serde"]}
 urlencoding = "2.1"
 lazy_static = "1.5"
 log = "0.4"
+env_logger = "0.11.10"
