@@ -18,7 +18,7 @@ use tokio::time::timeout;
 
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 const ASYNC_UPLOAD_CHUNK_SIZE: usize = 8 * 1024;
-const DEFAULT_ASYNC_PARSE_BATCH_SIZE: u64 = 1;
+const DEFAULT_ASYNC_PARSE_BATCH_SIZE: u64 = 3;
 const FALLBACK_GAS_LIMIT_ENV: &str = "QPL_FALLBACK_GAS_LIMIT";
 const ASYNC_PARSE_BATCH_SIZE_ENV: &str = "QPL_ASYNC_PARSE_BATCH_SIZE";
 
@@ -29,7 +29,8 @@ abigen!(
         function resolver() view returns (address)
         function startAsyncUpsert(bytes32 refId, bytes signature)
         function uploadChunkData(bytes32 refId, bytes chunkData)
-        function parseTCBInfo(bytes32 refId, uint256 start, uint256 offset) returns (uint256 parsed, uint256 total, bool complete)
+        function uploadParsedTcbLevelsBatch(bytes32 refId, uint256 start, string[] rawLevelObjects) returns (uint256 parsed, uint256 total, bool complete)
+        function uploadParsedTdxModuleIdentitiesBatch(bytes32 refId, uint256 start, string[] rawIdentityObjects) returns (uint256 parsed, uint256 total, bool complete)
         function finalizeAsyncUpsert(bytes32 attestationId, bytes32 refId) returns (bytes32)
     ]"#
 );
@@ -48,10 +49,12 @@ struct TcbLocator {
     version: u32,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct AsyncParsePlan {
     total_levels: u64,
     total_module_identities: u64,
+    level_objects: Vec<String>,
+    module_identity_objects: Vec<String>,
 }
 
 pub async fn upsert_tcb_fmspc_func(
@@ -266,10 +269,15 @@ where
 
     let batch_size = async_parse_batch_size();
     for start in (0..parse_plan.total_levels).step_by(batch_size as usize) {
-        let label = format!("parse_tcb_info_{}", start);
+        let end = std::cmp::min(start as usize + batch_size as usize, parse_plan.level_objects.len());
+        let label = format!("upload_parsed_tcb_levels_batch_{}", start);
         if !send_transaction(
             signer,
-            dao.parse_tcb_info(ref_id, U256::from(start), U256::from(batch_size))
+            dao.upload_parsed_tcb_levels_batch(
+                ref_id,
+                U256::from(start),
+                parse_plan.level_objects[start as usize..end].to_vec(),
+            )
                 .gas_price(gas_price),
             log_prefix,
             &label,
@@ -281,10 +289,16 @@ where
     }
 
     for start in (0..parse_plan.total_module_identities).step_by(batch_size as usize) {
-        let label = format!("parse_tcb_tdx_module_identities_{}", start);
+        let end =
+            std::cmp::min(start as usize + batch_size as usize, parse_plan.module_identity_objects.len());
+        let label = format!("upload_parsed_tdx_module_identities_batch_{}", start);
         if !send_transaction(
             signer,
-            dao.parse_tcb_info(ref_id, U256::from(start), U256::from(batch_size))
+            dao.upload_parsed_tdx_module_identities_batch(
+                ref_id,
+                U256::from(start),
+                parse_plan.module_identity_objects[start as usize..end].to_vec(),
+            )
                 .gas_price(gas_price),
             log_prefix,
             &label,
@@ -540,12 +554,34 @@ fn parse_tcb_info_payload(
         .and_then(Value::as_array)
         .map(|value| value.len() as u64)
         .ok_or_else(|| "missing tcbLevels".to_string())?;
+    let level_objects = tcb_info
+        .tcb_info
+        .get("tcbLevels")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "missing tcbLevels".to_string())?
+        .iter()
+        .map(|value| serde_json::to_string(value).map_err(|err| format!("invalid tcbLevel object: {:?}", err)))
+        .collect::<Result<Vec<_>, _>>()?;
     let total_module_identities = tcb_info
         .tcb_info
         .get("tdxModuleIdentities")
         .and_then(Value::as_array)
         .map(|value| value.len() as u64)
         .unwrap_or(0);
+    let module_identity_objects = tcb_info
+        .tcb_info
+        .get("tdxModuleIdentities")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|value| {
+                    serde_json::to_string(value)
+                        .map_err(|err| format!("invalid tdxModuleIdentity object: {:?}", err))
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
 
     Ok((
         TcbInfoJsonObj {
@@ -560,6 +596,8 @@ fn parse_tcb_info_payload(
         AsyncParsePlan {
             total_levels,
             total_module_identities,
+            level_objects,
+            module_identity_objects,
         },
     ))
 }
