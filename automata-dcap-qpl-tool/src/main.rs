@@ -316,5 +316,40 @@ fn main() {
         if !ok {
             std::process::exit(1);
         }
+    } else if opt.func == "upsert_tcb_fmspc_async_v3".to_string() {
+        if opt.private_key.is_empty() {
+            println!("private_key is required for upsert_tcb_fmspc_async_v3");
+            return;
+        }
+        if opt.fmspc_tcb_dao_contract_addr.is_empty() {
+            println!("fmspc_tcb_dao_contract_addr is required for upsert_tcb_fmspc_async_v3");
+            return;
+        }
+
+        // platform defaults to sgx; pass --pck_ca tdx (or set it to anything other than empty)
+        // to switch to the TDX Intel PCS endpoint. Note: TDX TCBInfo also requires the v3 DAO
+        // contract to be deployed for the right TCB_EVALUATION_NUMBER.
+        let platform = if opt.pck_ca.eq_ignore_ascii_case("tdx") { "tdx" } else { "sgx" };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let ok = rt.block_on(helper::upsert_tcb_fmspc_v3_func(
+            opt.private_key,
+            opt.rpc_url,
+            opt.chain_id,
+            ethers::types::U256::from_dec_str(&opt.gas_price).expect("invalid gas_price"),
+            &opt.fmspc,
+            platform,
+            &opt.version,
+            (!opt.collateral_update_type.is_empty()).then_some(opt.collateral_update_type.as_str()),
+            (opt.tcb_evaluation_data_number > 0).then_some(opt.tcb_evaluation_data_number),
+            &opt.fmspc_tcb_dao_contract_addr,
+            (!opt.tcb_info_json_file.is_empty()).then_some(opt.tcb_info_json_file.as_str()),
+            (!opt.tcb_info_signature_hex.is_empty()).then_some(opt.tcb_info_signature_hex.as_str()),
+        ));
+        if !ok {
+            std::process::exit(1);
+        }
     }
 }

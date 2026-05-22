@@ -1,5 +1,8 @@
 #[path = "helper/tcb_fmspc_async.rs"]
-mod tcb_fmspc_async;
+pub(crate) mod tcb_fmspc_async;
+
+#[path = "helper/tcb_fmspc_async_v3.rs"]
+mod tcb_fmspc_async_v3;
 
 use crate::cloud_providers::*;
 use crate::contracts::*;
@@ -25,6 +28,8 @@ use tokio::time::{timeout, Duration};
 
 #[allow(unused_imports)]
 pub use tcb_fmspc_async::upsert_tcb_fmspc_func;
+#[allow(unused_imports)]
+pub use tcb_fmspc_async_v3::upsert_tcb_fmspc_v3_func;
 
 /// Timeout for waiting for transaction confirmation (2 minutes)
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);

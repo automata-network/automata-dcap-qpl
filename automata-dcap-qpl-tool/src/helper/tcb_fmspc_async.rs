@@ -43,10 +43,10 @@ abigen!(
 );
 
 #[derive(Clone, Copy)]
-struct TcbLocator {
-    tcb_type: u8,
-    fmspc: [u8; 6],
-    version: u32,
+pub(crate) struct TcbLocator {
+    pub(crate) tcb_type: u8,
+    pub(crate) fmspc: [u8; 6],
+    pub(crate) version: u32,
 }
 
 #[derive(Clone)]
@@ -115,7 +115,7 @@ pub async fn upsert_tcb_fmspc_func(
     .await
 }
 
-fn load_tcb_info_payload_from_file(
+pub(crate) fn load_tcb_info_payload_from_file(
     log_prefix: &str,
     path: &str,
     platform: &str,
@@ -181,7 +181,7 @@ fn resolve_signature_hex(path: &str, signature_hex: Option<&str>) -> Result<Stri
     Ok(signature.trim().trim_start_matches("0x").to_string())
 }
 
-async fn fetch_tcb_info_payload(
+pub(crate) async fn fetch_tcb_info_payload(
     log_prefix: &str,
     fmspc: &str,
     platform: &str,
@@ -355,7 +355,7 @@ fn async_parse_batch_size() -> u64 {
         .unwrap_or(DEFAULT_ASYNC_PARSE_BATCH_SIZE)
 }
 
-async fn send_transaction<M, D>(
+pub(crate) async fn send_transaction<M, D>(
     signer: &M,
     call: ContractCall<M, D>,
     log_prefix: &str,
@@ -480,7 +480,7 @@ where
     }
 }
 
-async fn gas_limit_with_fallback<M: Middleware>(
+pub(crate) async fn gas_limit_with_fallback<M: Middleware>(
     signer: &M,
     tx: &TypedTransaction,
     log_prefix: &str,
@@ -602,7 +602,7 @@ fn parse_tcb_info_payload(
     ))
 }
 
-fn extract_tcb_info_str(raw_json: &str) -> Result<String, String> {
+pub(crate) fn extract_tcb_info_str(raw_json: &str) -> Result<String, String> {
     let start = r#""tcbInfo":"#;
     let end = r#","signature""#;
     let trimmed = raw_json.trim();
@@ -616,7 +616,7 @@ fn extract_tcb_info_str(raw_json: &str) -> Result<String, String> {
     Ok(tail[..end_idx].to_string())
 }
 
-fn parse_tcb_type(value: &str) -> u8 {
+pub(crate) fn parse_tcb_type(value: &str) -> u8 {
     if value.eq_ignore_ascii_case("tdx") {
         1
     } else {
@@ -624,7 +624,7 @@ fn parse_tcb_type(value: &str) -> u8 {
     }
 }
 
-fn fallback_tcb_version(value: &str) -> Option<u32> {
+pub(crate) fn fallback_tcb_version(value: &str) -> Option<u32> {
     match value {
         "v3" => Some(2),
         "v4" | "v5" => Some(3),
@@ -632,7 +632,7 @@ fn fallback_tcb_version(value: &str) -> Option<u32> {
     }
 }
 
-fn generate_ref_id(locator: TcbLocator, tcb_info_obj: &TcbInfoJsonObj) -> [u8; 32] {
+pub(crate) fn generate_ref_id(locator: TcbLocator, tcb_info_obj: &TcbInfoJsonObj) -> [u8; 32] {
     let now_nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
