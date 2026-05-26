@@ -7,7 +7,7 @@ pub use fmspc_tcb_dao::*;
     clippy::upper_case_acronyms,
     clippy::type_complexity,
     dead_code,
-    non_camel_case_types,
+    non_camel_case_types
 )]
 pub mod fmspc_tcb_dao {
     #[allow(deprecated)]
@@ -17,532 +17,408 @@ pub mod fmspc_tcb_dao {
             functions: ::core::convert::From::from([
                 (
                     ::std::borrow::ToOwned::to_owned("FMSPC_TCB_KEY"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("FMSPC_TCB_KEY"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("tcbType"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint8"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("fmspc"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        6usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes6"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("version"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint32"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("key"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("FMSPC_TCB_KEY"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("tcbType"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint8"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("fmspc"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(6usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("bytes6"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("version"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint32"),
+                                ),
+                            },
+                        ],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("key"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("FmspcTcbLib"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("FmspcTcbLib"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("contract FmspcTcbHelper"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("FmspcTcbLib"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("contract FmspcTcbHelper"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("P256_VERIFIER"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("P256_VERIFIER"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("address"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("P256_VERIFIER"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("Pcs"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("Pcs"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("contract PcsDao"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("Pcs"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("contract PcsDao"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("crlLibAddr"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("crlLibAddr"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("address"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("crlLibAddr"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("getAttestedData"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("getAttestedData"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("key"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("attestationData"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getAttestedData"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("key"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("attestationData"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("getCollateralHash"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("getCollateralHash"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("key"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("collateralHash"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getCollateralHash"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("key"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("collateralHash"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("getCollateralValidity"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "getCollateralValidity",
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getCollateralValidity",),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("key"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
                             ),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("key"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned(
-                                        "issueDateTimestamp",
-                                    ),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint64"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned(
-                                        "nextUpdateTimestamp",
-                                    ),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint64"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                        },],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("issueDateTimestamp",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("nextUpdateTimestamp",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("getTcbInfo"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("getTcbInfo"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("tcbType"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
-                                        256usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint256"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("fmspc"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::String,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("string"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("version"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
-                                        256usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint256"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("tcbObj"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Tuple(
-                                        ::std::vec![
-                                            ::ethers::core::abi::ethabi::ParamType::String,
-                                            ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                        ],
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("struct TcbInfoJsonObj"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getTcbInfo"),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("tcbType"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("fmspc"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::String,
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("string"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("version"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                ),
+                            },
+                        ],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("tcbObj"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::String,
+                                ::ethers::core::abi::ethabi::ParamType::Bytes,
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("struct TcbInfoJsonObj"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("getTcbInfoContentHash"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "getTcbInfoContentHash",
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getTcbInfoContentHash",),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("key"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
                             ),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("key"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("getTcbIssuerChain"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("getTcbIssuerChain"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("signingCert"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("rootCert"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getTcbIssuerChain"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("signingCert"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("bytes"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("rootCert"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("bytes"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("resolver"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("resolver"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned(
-                                            "contract IDaoAttestationResolver",
-                                        ),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("resolver"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned(
+                                    "contract IDaoAttestationResolver",
+                                ),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("upsertFmspcTcb"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("upsertFmspcTcb"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("tcbInfoObj"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Tuple(
-                                        ::std::vec![
-                                            ::ethers::core::abi::ethabi::ParamType::String,
-                                            ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                        ],
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("struct TcbInfoJsonObj"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("attestationId"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        32usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("bytes32"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("upsertFmspcTcb"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("tcbInfoObj"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::String,
+                                ::ethers::core::abi::ethabi::ParamType::Bytes,
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("struct TcbInfoJsonObj"),
+                            ),
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("attestationId"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(32usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bytes32"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("x509"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("x509"),
-                            inputs: ::std::vec![],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("address"),
-                                    ),
-                                },
-                            ],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("x509"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("address"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
                 ),
             ]),
-            events: ::core::convert::From::from([
-                (
-                    ::std::borrow::ToOwned::to_owned("UpsertedFmpscTcb"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Event {
-                            name: ::std::borrow::ToOwned::to_owned("UpsertedFmpscTcb"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("tcbType"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
-                                    indexed: true,
-                                },
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("fmspcTcbBytes"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(
-                                        6usize,
-                                    ),
-                                    indexed: true,
-                                },
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("version"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
-                                    indexed: true,
-                                },
-                            ],
-                            anonymous: false,
+            events: ::core::convert::From::from([(
+                ::std::borrow::ToOwned::to_owned("UpsertedFmpscTcb"),
+                ::std::vec![::ethers::core::abi::ethabi::Event {
+                    name: ::std::borrow::ToOwned::to_owned("UpsertedFmpscTcb"),
+                    inputs: ::std::vec![
+                        ::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::borrow::ToOwned::to_owned("tcbType"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(8usize),
+                            indexed: true,
+                        },
+                        ::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::borrow::ToOwned::to_owned("fmspcTcbBytes"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedBytes(6usize,),
+                            indexed: true,
+                        },
+                        ::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::borrow::ToOwned::to_owned("version"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                            indexed: true,
                         },
                     ],
-                ),
-            ]),
+                    anonymous: false,
+                },],
+            )]),
             errors: ::core::convert::From::from([
                 (
                     ::std::borrow::ToOwned::to_owned("Duplicate_Collateral"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "Duplicate_Collateral",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("Duplicate_Collateral",),
+                        inputs: ::std::vec![],
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("Invalid_TCB_Cert_Signature"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "Invalid_TCB_Cert_Signature",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("Invalid_TCB_Cert_Signature",),
+                        inputs: ::std::vec![],
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("Missing_TCB_Cert"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("Missing_TCB_Cert"),
-                            inputs: ::std::vec![],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("Missing_TCB_Cert"),
+                        inputs: ::std::vec![],
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("TCB_Cert_Expired"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("TCB_Cert_Expired"),
-                            inputs: ::std::vec![],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("TCB_Cert_Expired"),
+                        inputs: ::std::vec![],
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("TCB_Cert_Revoked"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("TCB_Cert_Revoked"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("serialNum"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
-                                        256usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint256"),
-                                    ),
-                                },
-                            ],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("TCB_Cert_Revoked"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("serialNum"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("TCB_Expired"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("TCB_Expired"),
-                            inputs: ::std::vec![],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("TCB_Expired"),
+                        inputs: ::std::vec![],
+                    },],
                 ),
                 (
                     ::std::borrow::ToOwned::to_owned("TCB_Out_Of_Date"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("TCB_Out_Of_Date"),
-                            inputs: ::std::vec![],
-                        },
-                    ],
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("TCB_Out_Of_Date"),
+                        inputs: ::std::vec![],
+                    },],
                 ),
             ]),
             receive: false,
@@ -550,9 +426,8 @@ pub mod fmspc_tcb_dao {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static FMSPCTCBDAO_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
-        __abi,
-    );
+    pub static FMSPCTCBDAO_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> =
+        ::ethers::contract::Lazy::new(__abi);
     pub struct FmspcTcbDao<M>(::ethers::contract::Contract<M>);
     impl<M> ::core::clone::Clone for FmspcTcbDao<M> {
         fn clone(&self) -> Self {
@@ -584,13 +459,11 @@ pub mod fmspc_tcb_dao {
             address: T,
             client: ::std::sync::Arc<M>,
         ) -> Self {
-            Self(
-                ::ethers::contract::Contract::new(
-                    address.into(),
-                    FMSPCTCBDAO_ABI.clone(),
-                    client,
-                ),
-            )
+            Self(::ethers::contract::Contract::new(
+                address.into(),
+                FMSPCTCBDAO_ABI.clone(),
+                client,
+            ))
         }
         ///Calls the contract's `FMSPC_TCB_KEY` (0xb63e9e7b) function
         pub fn fmspc_tcb_key(
@@ -606,10 +479,7 @@ pub mod fmspc_tcb_dao {
         ///Calls the contract's `FmspcTcbLib` (0x4ba52fa5) function
         pub fn fmspc_tcb_lib(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Address,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([75, 165, 47, 165], ())
                 .expect("method not found (this should never happen)")
@@ -617,10 +487,7 @@ pub mod fmspc_tcb_dao {
         ///Calls the contract's `P256_VERIFIER` (0x536c633d) function
         pub fn p256_verifier(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Address,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([83, 108, 99, 61], ())
                 .expect("method not found (this should never happen)")
@@ -628,10 +495,7 @@ pub mod fmspc_tcb_dao {
         ///Calls the contract's `Pcs` (0xd88d1df6) function
         pub fn pcs(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Address,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([216, 141, 29, 246], ())
                 .expect("method not found (this should never happen)")
@@ -639,10 +503,7 @@ pub mod fmspc_tcb_dao {
         ///Calls the contract's `crlLibAddr` (0x37c6d028) function
         pub fn crl_lib_addr(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Address,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([55, 198, 208, 40], ())
                 .expect("method not found (this should never happen)")
@@ -651,10 +512,7 @@ pub mod fmspc_tcb_dao {
         pub fn get_attested_data(
             &self,
             key: [u8; 32],
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Bytes,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Bytes> {
             self.0
                 .method_hash([180, 20, 208, 178], key)
                 .expect("method not found (this should never happen)")
@@ -711,10 +569,7 @@ pub mod fmspc_tcb_dao {
         ///Calls the contract's `resolver` (0x04f3bcec) function
         pub fn resolver(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Address,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([4, 243, 188, 236], ())
                 .expect("method not found (this should never happen)")
@@ -731,10 +586,7 @@ pub mod fmspc_tcb_dao {
         ///Calls the contract's `x509` (0xec950d33) function
         pub fn x_509(
             &self,
-        ) -> ::ethers::contract::builders::ContractCall<
-            M,
-            ::ethers::core::types::Address,
-        > {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([236, 149, 13, 51], ())
                 .expect("method not found (this should never happen)")
@@ -742,26 +594,20 @@ pub mod fmspc_tcb_dao {
         ///Gets the contract's `UpsertedFmpscTcb` event
         pub fn upserted_fmpsc_tcb_filter(
             &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            UpsertedFmpscTcbFilter,
-        > {
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, UpsertedFmpscTcbFilter>
+        {
             self.0.event()
         }
         /// Returns an `Event` builder for all the events of this contract.
         pub fn events(
             &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            UpsertedFmpscTcbFilter,
-        > {
-            self.0.event_with_filter(::core::default::Default::default())
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, UpsertedFmpscTcbFilter>
+        {
+            self.0
+                .event_with_filter(::core::default::Default::default())
         }
     }
-    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
-    for FmspcTcbDao<M> {
+    impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>> for FmspcTcbDao<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
@@ -775,7 +621,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(name = "Duplicate_Collateral", abi = "Duplicate_Collateral()")]
     pub struct Duplicate_Collateral;
@@ -788,7 +634,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(
         name = "Invalid_TCB_Cert_Signature",
@@ -804,7 +650,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(name = "Missing_TCB_Cert", abi = "Missing_TCB_Cert()")]
     pub struct Missing_TCB_Cert;
@@ -817,7 +663,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(name = "TCB_Cert_Expired", abi = "TCB_Cert_Expired()")]
     pub struct TCB_Cert_Expired;
@@ -830,7 +676,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(name = "TCB_Cert_Revoked", abi = "TCB_Cert_Revoked(uint256)")]
     pub struct TCB_Cert_Revoked {
@@ -845,7 +691,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(name = "TCB_Expired", abi = "TCB_Expired()")]
     pub struct TCB_Expired;
@@ -858,7 +704,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[etherror(name = "TCB_Out_Of_Date", abi = "TCB_Out_Of_Date()")]
     pub struct TCB_Out_Of_Date;
@@ -881,44 +727,37 @@ pub mod fmspc_tcb_dao {
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
-            if let Ok(decoded) = <::std::string::String as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <::std::string::String as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::RevertString(decoded));
             }
-            if let Ok(decoded) = <Duplicate_Collateral as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <Duplicate_Collateral as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::Duplicate_Collateral(decoded));
             }
-            if let Ok(decoded) = <Invalid_TCB_Cert_Signature as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <Invalid_TCB_Cert_Signature as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::Invalid_TCB_Cert_Signature(decoded));
             }
-            if let Ok(decoded) = <Missing_TCB_Cert as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <Missing_TCB_Cert as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::Missing_TCB_Cert(decoded));
             }
-            if let Ok(decoded) = <TCB_Cert_Expired as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <TCB_Cert_Expired as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::TCB_Cert_Expired(decoded));
             }
-            if let Ok(decoded) = <TCB_Cert_Revoked as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <TCB_Cert_Revoked as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::TCB_Cert_Revoked(decoded));
             }
-            if let Ok(decoded) = <TCB_Expired as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <TCB_Expired as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::TCB_Expired(decoded));
             }
-            if let Ok(decoded) = <TCB_Out_Of_Date as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <TCB_Out_Of_Date as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::TCB_Out_Of_Date(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
@@ -933,21 +772,11 @@ pub mod fmspc_tcb_dao {
                 Self::Invalid_TCB_Cert_Signature(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::Missing_TCB_Cert(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::TCB_Cert_Expired(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::TCB_Cert_Revoked(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::TCB_Expired(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::TCB_Out_Of_Date(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
+                Self::Missing_TCB_Cert(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TCB_Cert_Expired(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TCB_Cert_Revoked(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TCB_Expired(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TCB_Out_Of_Date(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
             }
         }
@@ -957,29 +786,26 @@ pub mod fmspc_tcb_dao {
             match selector {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
                 _ if selector
-                    == <Duplicate_Collateral as ::ethers::contract::EthError>::selector() => {
+                    == <Duplicate_Collateral as ::ethers::contract::EthError>::selector() =>
+                {
                     true
                 }
                 _ if selector
-                    == <Invalid_TCB_Cert_Signature as ::ethers::contract::EthError>::selector() => {
+                    == <Invalid_TCB_Cert_Signature as ::ethers::contract::EthError>::selector() =>
+                {
                     true
                 }
-                _ if selector
-                    == <Missing_TCB_Cert as ::ethers::contract::EthError>::selector() => {
+                _ if selector == <Missing_TCB_Cert as ::ethers::contract::EthError>::selector() => {
                     true
                 }
-                _ if selector
-                    == <TCB_Cert_Expired as ::ethers::contract::EthError>::selector() => {
+                _ if selector == <TCB_Cert_Expired as ::ethers::contract::EthError>::selector() => {
                     true
                 }
-                _ if selector
-                    == <TCB_Cert_Revoked as ::ethers::contract::EthError>::selector() => {
+                _ if selector == <TCB_Cert_Revoked as ::ethers::contract::EthError>::selector() => {
                     true
                 }
-                _ if selector
-                    == <TCB_Expired as ::ethers::contract::EthError>::selector() => true,
-                _ if selector
-                    == <TCB_Out_Of_Date as ::ethers::contract::EthError>::selector() => {
+                _ if selector == <TCB_Expired as ::ethers::contract::EthError>::selector() => true,
+                _ if selector == <TCB_Out_Of_Date as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ => false,
@@ -989,12 +815,8 @@ pub mod fmspc_tcb_dao {
     impl ::core::fmt::Display for FmspcTcbDaoErrors {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                Self::Duplicate_Collateral(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::Invalid_TCB_Cert_Signature(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
+                Self::Duplicate_Collateral(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Invalid_TCB_Cert_Signature(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Missing_TCB_Cert(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TCB_Cert_Expired(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TCB_Cert_Revoked(element) => ::core::fmt::Display::fmt(element, f),
@@ -1052,9 +874,12 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
-    #[ethevent(name = "UpsertedFmpscTcb", abi = "UpsertedFmpscTcb(uint8,bytes6,uint32)")]
+    #[ethevent(
+        name = "UpsertedFmpscTcb",
+        abi = "UpsertedFmpscTcb(uint8,bytes6,uint32)"
+    )]
     pub struct UpsertedFmpscTcbFilter {
         #[ethevent(indexed)]
         pub tcb_type: u8,
@@ -1072,7 +897,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "FMSPC_TCB_KEY", abi = "FMSPC_TCB_KEY(uint8,bytes6,uint32)")]
     pub struct FmspcTcbKeyCall {
@@ -1089,7 +914,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "FmspcTcbLib", abi = "FmspcTcbLib()")]
     pub struct FmspcTcbLibCall;
@@ -1102,7 +927,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "P256_VERIFIER", abi = "P256_VERIFIER()")]
     pub struct P256VerifierCall;
@@ -1115,7 +940,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "Pcs", abi = "Pcs()")]
     pub struct PcsCall;
@@ -1128,7 +953,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "crlLibAddr", abi = "crlLibAddr()")]
     pub struct CrlLibAddrCall;
@@ -1141,7 +966,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "getAttestedData", abi = "getAttestedData(bytes32)")]
     pub struct GetAttestedDataCall {
@@ -1156,7 +981,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "getCollateralHash", abi = "getCollateralHash(bytes32)")]
     pub struct GetCollateralHashCall {
@@ -1171,7 +996,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "getCollateralValidity", abi = "getCollateralValidity(bytes32)")]
     pub struct GetCollateralValidityCall {
@@ -1186,7 +1011,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "getTcbInfo", abi = "getTcbInfo(uint256,string,uint256)")]
     pub struct GetTcbInfoCall {
@@ -1203,7 +1028,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "getTcbInfoContentHash", abi = "getTcbInfoContentHash(bytes32)")]
     pub struct GetTcbInfoContentHashCall {
@@ -1218,7 +1043,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "getTcbIssuerChain", abi = "getTcbIssuerChain()")]
     pub struct GetTcbIssuerChainCall;
@@ -1231,7 +1056,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "resolver", abi = "resolver()")]
     pub struct ResolverCall;
@@ -1244,7 +1069,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "upsertFmspcTcb", abi = "upsertFmspcTcb((string,bytes))")]
     pub struct UpsertFmspcTcbCall {
@@ -1259,7 +1084,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     #[ethcall(name = "x509", abi = "x509()")]
     pub struct X509Call;
@@ -1286,74 +1111,59 @@ pub mod fmspc_tcb_dao {
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
-            if let Ok(decoded) = <FmspcTcbKeyCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <FmspcTcbKeyCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::FmspcTcbKey(decoded));
             }
-            if let Ok(decoded) = <FmspcTcbLibCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <FmspcTcbLibCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::FmspcTcbLib(decoded));
             }
-            if let Ok(decoded) = <P256VerifierCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <P256VerifierCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::P256Verifier(decoded));
             }
-            if let Ok(decoded) = <PcsCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <PcsCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Pcs(decoded));
             }
-            if let Ok(decoded) = <CrlLibAddrCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <CrlLibAddrCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::CrlLibAddr(decoded));
             }
-            if let Ok(decoded) = <GetAttestedDataCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <GetAttestedDataCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::GetAttestedData(decoded));
             }
-            if let Ok(decoded) = <GetCollateralHashCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <GetCollateralHashCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::GetCollateralHash(decoded));
             }
-            if let Ok(decoded) = <GetCollateralValidityCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <GetCollateralValidityCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::GetCollateralValidity(decoded));
             }
-            if let Ok(decoded) = <GetTcbInfoCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <GetTcbInfoCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::GetTcbInfo(decoded));
             }
-            if let Ok(decoded) = <GetTcbInfoContentHashCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <GetTcbInfoContentHashCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::GetTcbInfoContentHash(decoded));
             }
-            if let Ok(decoded) = <GetTcbIssuerChainCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <GetTcbIssuerChainCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::GetTcbIssuerChain(decoded));
             }
-            if let Ok(decoded) = <ResolverCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <ResolverCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Resolver(decoded));
             }
-            if let Ok(decoded) = <UpsertFmspcTcbCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) =
+                <UpsertFmspcTcbCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
                 return Ok(Self::UpsertFmspcTcb(decoded));
             }
-            if let Ok(decoded) = <X509Call as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
+            if let Ok(decoded) = <X509Call as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::X509(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
@@ -1362,43 +1172,23 @@ pub mod fmspc_tcb_dao {
     impl ::ethers::core::abi::AbiEncode for FmspcTcbDaoCalls {
         fn encode(self) -> Vec<u8> {
             match self {
-                Self::FmspcTcbKey(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::FmspcTcbLib(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::P256Verifier(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
+                Self::FmspcTcbKey(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::FmspcTcbLib(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::P256Verifier(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Pcs(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::CrlLibAddr(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::GetAttestedData(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::GetCollateralHash(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
+                Self::CrlLibAddr(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GetAttestedData(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GetCollateralHash(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetCollateralValidity(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::GetTcbInfo(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
+                Self::GetTcbInfo(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetTcbInfoContentHash(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::GetTcbIssuerChain(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::Resolver(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::UpsertFmspcTcb(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
+                Self::GetTcbIssuerChain(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::Resolver(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::UpsertFmspcTcb(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::X509(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
@@ -1413,13 +1203,9 @@ pub mod fmspc_tcb_dao {
                 Self::CrlLibAddr(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetAttestedData(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetCollateralHash(element) => ::core::fmt::Display::fmt(element, f),
-                Self::GetCollateralValidity(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
+                Self::GetCollateralValidity(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetTcbInfo(element) => ::core::fmt::Display::fmt(element, f),
-                Self::GetTcbInfoContentHash(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
+                Self::GetTcbInfoContentHash(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetTcbIssuerChain(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Resolver(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpsertFmspcTcb(element) => ::core::fmt::Display::fmt(element, f),
@@ -1506,7 +1292,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct FmspcTcbKeyReturn {
         pub key: [u8; 32],
@@ -1520,7 +1306,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct FmspcTcbLibReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `P256_VERIFIER` function with signature `P256_VERIFIER()` and selector `0x536c633d`
@@ -1532,7 +1318,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct P256VerifierReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `Pcs` function with signature `Pcs()` and selector `0xd88d1df6`
@@ -1544,7 +1330,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct PcsReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `crlLibAddr` function with signature `crlLibAddr()` and selector `0x37c6d028`
@@ -1556,7 +1342,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct CrlLibAddrReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `getAttestedData` function with signature `getAttestedData(bytes32)` and selector `0xb414d0b2`
@@ -1568,7 +1354,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct GetAttestedDataReturn {
         pub attestation_data: ::ethers::core::types::Bytes,
@@ -1582,7 +1368,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct GetCollateralHashReturn {
         pub collateral_hash: [u8; 32],
@@ -1596,7 +1382,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct GetCollateralValidityReturn {
         pub issue_date_timestamp: u64,
@@ -1611,7 +1397,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct GetTcbInfoReturn {
         pub tcb_obj: TcbInfoJsonObj,
@@ -1625,7 +1411,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct GetTcbInfoContentHashReturn(pub [u8; 32]);
     ///Container type for all return fields from the `getTcbIssuerChain` function with signature `getTcbIssuerChain()` and selector `0xa53e7275`
@@ -1637,7 +1423,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct GetTcbIssuerChainReturn {
         pub signing_cert: ::ethers::core::types::Bytes,
@@ -1652,7 +1438,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct ResolverReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `upsertFmspcTcb` function with signature `upsertFmspcTcb((string,bytes))` and selector `0xa8349fb7`
@@ -1664,7 +1450,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct UpsertFmspcTcbReturn {
         pub attestation_id: [u8; 32],
@@ -1678,7 +1464,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct X509Return(pub ::ethers::core::types::Address);
     ///`TcbInfoJsonObj(string,bytes)`
@@ -1690,7 +1476,7 @@ pub mod fmspc_tcb_dao {
         Debug,
         PartialEq,
         Eq,
-        Hash
+        Hash,
     )]
     pub struct TcbInfoJsonObj {
         pub tcb_info_str: ::std::string::String,

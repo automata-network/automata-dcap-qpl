@@ -372,15 +372,24 @@ impl SgxQlConfig {
 
     pub fn print(&self) {
         println!("[Automata DCAP QPL] SgxQlConfig");
-        println!("[Automata DCAP QPL] cert_cpu_svn: {:?}", self.cert_cpu_svn.cpu_svn);
+        println!(
+            "[Automata DCAP QPL] cert_cpu_svn: {:?}",
+            self.cert_cpu_svn.cpu_svn
+        );
         println!(
             "[Automata DCAP QPL] cert_pce_isv_svn: {:?}",
             self.cert_pce_isv_svn.isv_svn as u16
         );
-        println!("[Automata DCAP QPL] cert_data_size: {:?}", self.cert_data_size as u32);
+        println!(
+            "[Automata DCAP QPL] cert_data_size: {:?}",
+            self.cert_data_size as u32
+        );
         let cert_data =
             unsafe { std::slice::from_raw_parts(self.cert_data, self.cert_data_size as usize) };
-        println!("[Automata DCAP QPL] cert_data: {}", std::str::from_utf8(cert_data).unwrap());
+        println!(
+            "[Automata DCAP QPL] cert_data: {}",
+            std::str::from_utf8(cert_data).unwrap()
+        );
     }
 }
 
@@ -389,7 +398,13 @@ impl Drop for SgxQlConfig {
         println!("[Automata DCAP QPL] free-ing sgx_ql_config cert_data");
         // free cert_data
         // unsafe { std::alloc::dealloc(self.cert_data, std::alloc::Layout::from_size_align_unchecked(self.cert_data_size as usize, 1)) };
-        let certs = unsafe { Vec::from_raw_parts(self.cert_data, self.cert_data_size as usize, self.cert_data_size as usize) };
+        let certs = unsafe {
+            Vec::from_raw_parts(
+                self.cert_data,
+                self.cert_data_size as usize,
+                self.cert_data_size as usize,
+            )
+        };
         drop(certs);
         self.cert_data_size = 0;
         self.cert_data = std::ptr::null_mut();
@@ -473,14 +488,20 @@ impl SgxQlQveCollateral {
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("[Automata DCAP QPL]  root_ca_crl_size: {:?}", self.root_ca_crl_size as usize);
+        println!(
+            "[Automata DCAP QPL]  root_ca_crl_size: {:?}",
+            self.root_ca_crl_size as usize
+        );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.root_ca_crl) };
         println!(
             "[Automata DCAP QPL]  root_ca_crl_size: {}",
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("[Automata DCAP QPL]  pck_crl_size: {:?}", self.pck_crl_size as usize);
+        println!(
+            "[Automata DCAP QPL]  pck_crl_size: {:?}",
+            self.pck_crl_size as usize
+        );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.pck_crl) };
         println!(
             "[Automata DCAP QPL]  pck_crl: {}",
@@ -497,7 +518,10 @@ impl SgxQlQveCollateral {
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("[Automata DCAP QPL]  tcb_info_size: {:?}", self.tcb_info_size as usize);
+        println!(
+            "[Automata DCAP QPL]  tcb_info_size: {:?}",
+            self.tcb_info_size as usize
+        );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.tcb_info) };
         println!(
             "[Automata DCAP QPL]  tcb_info: {}",
@@ -514,7 +538,10 @@ impl SgxQlQveCollateral {
             String::from_utf8_lossy(cstr.to_bytes()).to_string()
         );
 
-        println!("[Automata DCAP QPL]  qe_identity_size: {:?}", self.qe_identity_size as usize);
+        println!(
+            "[Automata DCAP QPL]  qe_identity_size: {:?}",
+            self.qe_identity_size as usize
+        );
         let cstr = unsafe { std::ffi::CStr::from_ptr(self.qe_identity) };
         println!(
             "[Automata DCAP QPL]  qe_identity: {}",

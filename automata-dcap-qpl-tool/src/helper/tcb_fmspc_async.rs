@@ -1,16 +1,15 @@
-//! Offchain driver for FmspcTcbDaoV2 — closes the V2 step-2/step-3 consistency hole by
-//! submitting per-level / per-identity byte ranges into the raw plus the components template,
-//! so finalize can reverse-serialize on-chain and assert byte-exact match with the signed raw.
+//! Offchain driver for the optimized FmspcTcbDaoV2 async upsert protocol.
 //!
-//! The on-chain layout this module mirrors is documented in
-//! `automata-on-chain-pccs/src/bases/FmspcTcbDaoV2.sol` and
-//! `automata-on-chain-pccs/src/helpers/FmspcTcbHelperV2.sol`.
+//! The worker parses Intel's minified inner `tcbInfo` JSON offchain, uploads typed
+//! values plus source-order metadata, and lets the contract rebuild the signed raw
+//! string while storing the legacy packed representation. Finalization verifies the
+//! rebuilt raw against Intel's signature, so the chain no longer needs a JSON parser
+//! or a second raw-vs-parsed consistency pass.
 
 use crate::helper::estimate_gas_at_latest;
 use crate::pccs_types::TcbInfo;
 use automata_dcap_qpl_contracts::{
-    fmspc_tcb_dao::TcbInfoJsonObj,
-    parse_address_from_env_var::parse_address_from_str,
+    fmspc_tcb_dao::TcbInfoJsonObj, parse_address_from_env_var::parse_address_from_str,
 };
 use ethers::abi::Detokenize;
 use ethers::contract::{abigen, builders::ContractCall};
@@ -24,10 +23,53 @@ use std::{fs, path::Path, sync::Arc};
 use tokio::time::timeout;
 
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
-const ASYNC_UPLOAD_CHUNK_SIZE: usize = 8 * 1024;
 const DEFAULT_ASYNC_PARSE_BATCH_SIZE: u64 = 3;
 const FALLBACK_GAS_LIMIT_ENV: &str = "QPL_FALLBACK_GAS_LIMIT";
 const ASYNC_PARSE_BATCH_SIZE_ENV: &str = "QPL_ASYNC_PARSE_BATCH_SIZE";
+
+const TOP_FIELDS: [&str; 11] = [
+    "id",
+    "version",
+    "issueDate",
+    "nextUpdate",
+    "fmspc",
+    "pceId",
+    "tcbType",
+    "tcbEvaluationDataNumber",
+    "tdxModule",
+    "tdxModuleIdentities",
+    "tcbLevels",
+];
+const TOP_ID: usize = 0;
+const TOP_VERSION: usize = 1;
+const TOP_ISSUE_DATE: usize = 2;
+const TOP_NEXT_UPDATE: usize = 3;
+const TOP_FMSPC: usize = 4;
+const TOP_PCE_ID: usize = 5;
+const TOP_TCB_TYPE: usize = 6;
+const TOP_EVAL_NUMBER: usize = 7;
+const TOP_TDX_MODULE: usize = 8;
+const TOP_TDX_IDENTITIES: usize = 9;
+const TOP_TCB_LEVELS: usize = 10;
+
+const LEVEL_FIELDS: [&str; 4] = ["tcb", "tcbDate", "tcbStatus", "advisoryIDs"];
+const TCB_FIELDS: [&str; 3] = ["sgxtcbcomponents", "pcesvn", "tdxtcbcomponents"];
+const COMPONENT_FIELDS: [&str; 3] = ["svn", "category", "type"];
+const IDENTITY_FIELDS: [&str; 5] = [
+    "id",
+    "mrsigner",
+    "attributes",
+    "attributesMask",
+    "tcbLevels",
+];
+const TDX_MODULE_FIELDS: [&str; 3] = ["mrsigner", "attributes", "attributesMask"];
+
+const LEVEL_FLAG_HAS_ADVISORY_FIELD: u8 = 1;
+const LEVEL_FLAG_SGX_LAYOUT_OVERRIDE: u8 = 2;
+const LEVEL_FLAG_TDX_LAYOUT_OVERRIDE: u8 = 4;
+
+const TCB_LEVEL_PACKED_BASE_LEN: usize = 64;
+const TDX_IDENTITY_PACKED_BASE_LEN: usize = 128;
 
 fn async_parse_batch_size() -> u64 {
     std::env::var(ASYNC_PARSE_BATCH_SIZE_ENV)
@@ -42,15 +84,11 @@ abigen!(
     r#"[
         function FMSPC_TCB_KEY(uint8 tcbType, bytes6 fmspc, uint32 version) view returns (bytes32 key)
         function resolver() view returns (address)
-        function startAsyncUpsert(bytes32 refId, bytes signature)
-        function uploadChunkData(bytes32 refId, bytes chunkData)
-        function uploadComponentsTemplate(bytes32 refId, bytes sgxTemplate, bytes tdxTemplate)
-        function commitBasicsV2(bytes32 refId)
-        function commitBasicsExtract(bytes32 refId)
-        function commitTcbLevelsRange(bytes32 refId)
-        function commitTdxIdentitiesRange(bytes32 refId)
-        function uploadParsedTcbLevelsBatch(bytes32 refId, uint256 start, uint256 itemCount, bytes batchStream) returns (uint256 parsed, uint256 total, bool complete)
-        function uploadParsedTdxModuleIdentitiesBatch(bytes32 refId, uint256 start, uint256 itemCount, bytes batchStream) returns (uint256 parsed, uint256 total, bool complete)
+        function asyncUpsertProtocolVersion() pure returns (uint8)
+        function startAsyncUpsert(bytes32 refId, bytes signature, uint32 rawLength)
+        function uploadBasicInfo(bytes32 refId, bytes basicPayload, bytes topLevelOrder)
+        function uploadTcbLevelsBatch(bytes32 refId, uint256 start, uint256 itemCount, bytes payload) returns (uint256 parsed, uint256 total, bool complete)
+        function uploadTdxModuleIdentitiesBatch(bytes32 refId, uint256 start, uint256 itemCount, bytes payload) returns (uint256 parsed, uint256 total, bool complete)
         function finalizeAsyncUpsert(bytes32 attestationId, bytes32 refId) returns (bytes32)
     ]"#
 );
@@ -94,7 +132,15 @@ pub async fn upsert_tcb_fmspc_func(
             }
         }
     } else {
-        match fetch_payload(&log_prefix, fmspc, platform, version, collateral_update_type, tcb_evaluation_data_number).await
+        match fetch_payload(
+            &log_prefix,
+            fmspc,
+            platform,
+            version,
+            collateral_update_type,
+            tcb_evaluation_data_number,
+        )
+        .await
         {
             Ok(v) => v,
             Err(err) => {
@@ -106,13 +152,27 @@ pub async fn upsert_tcb_fmspc_func(
 
     let provider = Provider::<Http>::try_from(rpc_url).unwrap();
     let wallet = private_key.parse::<LocalWallet>().unwrap();
-    let signer = Arc::new(SignerMiddleware::new(provider, wallet.with_chain_id(chain_id)));
-    let dao = FmspcTcbDaoV2::new(parse_address_from_str(fmspc_tcb_dao_contract_addr), signer.clone());
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
+    let dao = FmspcTcbDaoV2::new(
+        parse_address_from_str(fmspc_tcb_dao_contract_addr),
+        signer.clone(),
+    );
 
-    run_upsert(&dao, signer.as_ref(), &log_prefix, gas_price, &raw_inner, &tcb_info_obj, locator).await
+    run_upsert(
+        &dao,
+        signer.as_ref(),
+        &log_prefix,
+        gas_price,
+        &raw_inner,
+        &tcb_info_obj,
+        locator,
+    )
+    .await
 }
 
-/// Run the staged V2 upsert end-to-end.
 async fn run_upsert<M: Middleware + 'static>(
     dao: &FmspcTcbDaoV2<M>,
     signer: &M,
@@ -126,44 +186,39 @@ where
     M::Error: 'static,
 {
     let raw = raw_inner.as_bytes();
-    let ranges = match find_array_ranges(raw) {
-        Ok(r) => r,
-        Err(err) => {
-            log::error!("{} byte-range scan failed: {}", log_prefix, err);
-            return false;
-        }
-    };
-    let levels = match extract_levels(raw, ranges.tcb_levels_start, ranges.tcb_levels_end, locator.version) {
+    let plan = match build_async_plan(raw, locator) {
         Ok(v) => v,
         Err(err) => {
-            log::error!("{} extract levels failed: {}", log_prefix, err);
+            log::error!("{} async V2 payload planning failed: {}", log_prefix, err);
             return false;
         }
     };
-    let identities = if let Some((s, e)) = ranges.identities {
-        match extract_identities(raw, s, e) {
-            Ok(v) => v,
-            Err(err) => {
-                log::error!("{} extract identities failed: {}", log_prefix, err);
-                return false;
-            }
-        }
-    } else {
-        Vec::new()
-    };
-    let sgx_template = extract_components_template(raw, levels[0].byte_start, levels[0].byte_end, b"\"sgxtcbcomponents\":")
-        .unwrap_or_default();
-    let tdx_template = if locator.tcb_type == 1 {
-        extract_components_template(raw, levels[0].byte_start, levels[0].byte_end, b"\"tdxtcbcomponents\":").unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
     let ref_id = generate_ref_id(locator, tcb_info_obj);
+
+    match dao.async_upsert_protocol_version().call().await {
+        Ok(2) => {}
+        Ok(other) => {
+            log::error!(
+                "{} unsupported async protocol version returned by target: {}",
+                log_prefix,
+                other
+            );
+            return false;
+        }
+        Err(err) => {
+            log::error!(
+                "{} asyncUpsertProtocolVersion call failed: {:?}",
+                log_prefix,
+                err
+            );
+            return false;
+        }
+    }
 
     if !send_transaction(
         signer,
-        dao.start_async_upsert(ref_id, tcb_info_obj.signature.clone()).gas_price(gas_price),
+        dao.start_async_upsert(ref_id, tcb_info_obj.signature.clone(), raw.len() as u32)
+            .gas_price(gas_price),
         log_prefix,
         "start_async_upsert",
     )
@@ -172,88 +227,43 @@ where
         return false;
     }
 
-    for (i, chunk) in raw.chunks(ASYNC_UPLOAD_CHUNK_SIZE).enumerate() {
-        let label = format!("upload_chunk_data_{}", i);
-        if !send_transaction(
-            signer,
-            dao.upload_chunk_data(ref_id, chunk.to_vec().into()).gas_price(gas_price),
-            log_prefix,
-            &label,
+    if !send_transaction(
+        signer,
+        dao.upload_basic_info(
+            ref_id,
+            plan.basic_payload.into(),
+            plan.top_level_order.to_vec().into(),
         )
-        .await
-        {
-            return false;
-        }
-    }
-
-    if !send_transaction(
-        signer,
-        dao.upload_components_template(ref_id, sgx_template.into(), tdx_template.into()).gas_price(gas_price),
+        .gas_price(gas_price),
         log_prefix,
-        "upload_components_template",
+        "upload_basic_info",
     )
     .await
     {
         return false;
     }
 
-    // Three staged commits (vs the bundled `commitBasicsV2`) keep each tx under the per-block
-    // gas cap as raw grows. Each stage walks only the slice of raw it needs:
-    //   1) commitBasicsExtract       — top-level field scan via extractBasics (~300K-1M)
-    //   2) commitTcbLevelsRange      — depth-1 scan + brace-count over the tcbLevels array
-    //   3) commitTdxIdentitiesRange  — same but for tdxModuleIdentities (TDX only)
-    if !send_transaction(
-        signer,
-        dao.commit_basics_extract(ref_id).gas_price(gas_price),
-        log_prefix,
-        "commit_basics_extract",
-    )
-    .await
-    {
-        return false;
-    }
-    if !send_transaction(
-        signer,
-        dao.commit_tcb_levels_range(ref_id).gas_price(gas_price),
-        log_prefix,
-        "commit_tcb_levels_range",
-    )
-    .await
-    {
-        return false;
-    }
-    if locator.tcb_type == 1 {
-        if !send_transaction(
-            signer,
-            dao.commit_tdx_identities_range(ref_id).gas_price(gas_price),
-            log_prefix,
-            "commit_tdx_identities_range",
-        )
-        .await
-        {
-            return false;
-        }
-    }
-
-    // Each async upload-batch tx does per-level reverse-serialization + keccak round-trip against
-    // the signed raw — about 1.3M gas per level. Submitting all 15+ levels in one tx blows the
-    // 2^24 (~16.7M) per-tx gas cap, so we chunk by `QPL_ASYNC_PARSE_BATCH_SIZE` (default 3).
     let batch_size = async_parse_batch_size() as usize;
     let mut sent = 0usize;
-    while sent < levels.len() {
-        let end = std::cmp::min(sent + batch_size, levels.len());
-        let chunk_stream = build_level_stream(&levels[sent..end], locator.tcb_type == 1);
+    while sent < plan.levels.len() {
+        let end = std::cmp::min(sent + batch_size, plan.levels.len());
+        let payload = build_level_batch_payload(
+            &plan.levels[sent..end],
+            plan.has_tdx_components,
+            locator.version,
+        );
+        let label = format!("upload_tcb_levels_batch_{}_{}", sent, end);
         if !send_transaction(
             signer,
-            dao.upload_parsed_tcb_levels_batch(
+            dao.upload_tcb_levels_batch(
                 ref_id,
                 U256::from(sent),
                 U256::from(end - sent),
-                chunk_stream.into(),
+                payload.into(),
             )
             .gas_price(gas_price),
             log_prefix,
-            "upload_parsed_tcb_levels_batch",
+            &label,
         )
         .await
         {
@@ -262,32 +272,35 @@ where
         sent = end;
     }
 
-    if !identities.is_empty() {
-        let mut sent = 0usize;
-        while sent < identities.len() {
-            let end = std::cmp::min(sent + batch_size, identities.len());
-            let chunk_stream = build_identity_stream(&identities[sent..end]);
-            if !send_transaction(
-                signer,
-                dao.upload_parsed_tdx_module_identities_batch(
-                    ref_id,
-                    U256::from(sent),
-                    U256::from(end - sent),
-                    chunk_stream.into(),
-                )
-                .gas_price(gas_price),
-                log_prefix,
-                "upload_parsed_tdx_module_identities_batch",
+    let mut sent = 0usize;
+    while sent < plan.identities.len() {
+        let end = std::cmp::min(sent + batch_size, plan.identities.len());
+        let payload = build_identity_batch_payload(&plan.identities[sent..end]);
+        let label = format!("upload_tdx_module_identities_batch_{}_{}", sent, end);
+        if !send_transaction(
+            signer,
+            dao.upload_tdx_module_identities_batch(
+                ref_id,
+                U256::from(sent),
+                U256::from(end - sent),
+                payload.into(),
             )
-            .await
-            {
-                return false;
-            }
-            sent = end;
+            .gas_price(gas_price),
+            log_prefix,
+            &label,
+        )
+        .await
+        {
+            return false;
         }
+        sent = end;
     }
 
-    let tcb_key = match dao.fmspc_tcb_key(locator.tcb_type, locator.fmspc, locator.version).call().await {
+    let tcb_key = match dao
+        .fmspc_tcb_key(locator.tcb_type, locator.fmspc, locator.version)
+        .call()
+        .await
+    {
         Ok(v) => v,
         Err(err) => {
             log::error!("{} fmspc_tcb_key call failed: {:?}", log_prefix, err);
@@ -312,7 +325,8 @@ where
 
     send_transaction(
         signer,
-        dao.finalize_async_upsert(attestation_id, ref_id).gas_price(gas_price),
+        dao.finalize_async_upsert(attestation_id, ref_id)
+            .gas_price(gas_price),
         log_prefix,
         "finalize_async_upsert",
     )
@@ -327,9 +341,11 @@ fn load_payload_from_file(
     platform: &str,
     collateral_version: &str,
 ) -> Result<(String, TcbInfoJsonObj, TcbLocator), String> {
-    let raw = fs::read_to_string(path).map_err(|err| format!("unable to read {}: {:?}", path, err))?;
+    let raw =
+        fs::read_to_string(path).map_err(|err| format!("unable to read {}: {:?}", path, err))?;
     let trimmed = raw.trim();
-    let payload = if trimmed.starts_with(r#"{"tcbInfo":{"#) && trimmed.contains(r#","signature":"#) {
+    let payload = if trimmed.starts_with(r#"{"tcbInfo":{"#) && trimmed.contains(r#","signature":"#)
+    {
         trimmed.to_string()
     } else {
         let sig = resolve_signature_hex(path, signature_hex)?;
@@ -359,11 +375,7 @@ fn resolve_signature_hex(path: &str, signature_hex: Option<&str>) -> Result<Stri
     let sibling_path = path_obj.with_file_name(sibling_name);
     let signature_path = if sibling_path.exists() {
         sibling_path
-    } else if sibling_path
-        .extension()
-        .and_then(|value| value.to_str())
-        == Some("json")
-    {
+    } else if sibling_path.extension().and_then(|value| value.to_str()) == Some("json") {
         sibling_path.with_extension("txt")
     } else {
         sibling_path
@@ -404,19 +416,34 @@ async fn fetch_payload(
     if !response.status().is_success() {
         return Err(format!("{} returned {}", req_url, response.status()));
     }
-    let body = response.text().await.map_err(|err| format!("unable to read body of {}: {:?}", req_url, err))?;
+    let body = response
+        .text()
+        .await
+        .map_err(|err| format!("unable to read body of {}: {:?}", req_url, err))?;
     parse_payload(&body, platform, version)
 }
 
-/// Extract the inner tcbInfo substring + signature from the wrapped `{"tcbInfo":{...},"signature":"..."}` body.
-fn parse_payload(raw_json: &str, platform: &str, collateral_version: &str) -> Result<(String, TcbInfoJsonObj, TcbLocator), String> {
-    let tcb_info: TcbInfo = serde_json::from_str(raw_json).map_err(|err| format!("invalid tcb payload: {:?}", err))?;
+fn parse_payload(
+    raw_json: &str,
+    platform: &str,
+    collateral_version: &str,
+) -> Result<(String, TcbInfoJsonObj, TcbLocator), String> {
+    let tcb_info: TcbInfo =
+        serde_json::from_str(raw_json).map_err(|err| format!("invalid tcb payload: {:?}", err))?;
     let inner = extract_tcb_info_str(raw_json)?;
-    let signature = Bytes::from_hex(tcb_info.signature).map_err(|err| format!("invalid signature: {:?}", err))?;
+    let signature = Bytes::from_hex(tcb_info.signature)
+        .map_err(|err| format!("invalid signature: {:?}", err))?;
 
-    let fmspc_hex = tcb_info.tcb_info.get("fmspc").and_then(Value::as_str).ok_or_else(|| "missing fmspc".to_string())?;
-    let fmspc_vec = hex::decode(fmspc_hex).map_err(|err| format!("invalid fmspc hex {}: {:?}", fmspc_hex, err))?;
-    let fmspc: [u8; 6] = fmspc_vec.try_into().map_err(|_| "unexpected fmspc length".to_string())?;
+    let fmspc_hex = tcb_info
+        .tcb_info
+        .get("fmspc")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing fmspc".to_string())?;
+    let fmspc_vec = hex::decode(fmspc_hex)
+        .map_err(|err| format!("invalid fmspc hex {}: {:?}", fmspc_hex, err))?;
+    let fmspc: [u8; 6] = fmspc_vec
+        .try_into()
+        .map_err(|_| "unexpected fmspc length".to_string())?;
     let tcb_type = tcb_info
         .tcb_info
         .get("id")
@@ -431,412 +458,914 @@ fn parse_payload(raw_json: &str, platform: &str, collateral_version: &str) -> Re
         .or_else(|| fallback_tcb_version(collateral_version))
         .ok_or_else(|| "missing version".to_string())?;
 
-    let tcb_info_obj = TcbInfoJsonObj { tcb_info_str: inner.clone(), signature };
-    Ok((inner, tcb_info_obj, TcbLocator { tcb_type, fmspc, version }))
+    let tcb_info_obj = TcbInfoJsonObj {
+        tcb_info_str: inner.clone(),
+        signature,
+    };
+    Ok((
+        inner,
+        tcb_info_obj,
+        TcbLocator {
+            tcb_type,
+            fmspc,
+            version,
+        },
+    ))
 }
 
-/* ----- byte-range scanning (mirrors the on-chain depth-1 brace scanner) ----- */
+/* ----- async payload planning ----- */
 
-struct ArrayRanges {
-    tcb_levels_start: usize,
-    tcb_levels_end: usize,
-    /// Some((start, end)) when the JSON has tdxModuleIdentities (TDX+v3 schema).
-    identities: Option<(usize, usize)>,
+#[derive(Clone, Debug)]
+struct JsonField {
+    key: String,
+    key_start: usize,
+    value_start: usize,
+    value_end: usize,
 }
 
-fn find_array_ranges(raw: &[u8]) -> Result<ArrayRanges, String> {
-    let levels = find_top_level_array(raw, b"tcbLevels").ok_or_else(|| "tcbLevels not found".to_string())?;
-    let ids = find_top_level_array(raw, b"tdxModuleIdentities");
-    Ok(ArrayRanges {
-        tcb_levels_start: levels.0,
-        tcb_levels_end: levels.1,
-        identities: ids,
-    })
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ComponentDescriptor {
+    svn_order: u8,
+    category_order: u8,
+    type_order: u8,
+    category: Vec<u8>,
+    component_type: Vec<u8>,
 }
 
-/// Find a top-level array value `"key":[...]` at object depth==1. Returns (`[` offset, position after `]`).
-fn find_top_level_array(raw: &[u8], key: &[u8]) -> Option<(usize, usize)> {
-    let mut needle = Vec::with_capacity(key.len() + 3);
-    needle.push(b'"');
-    needle.extend_from_slice(key);
-    needle.push(b'"');
-    needle.push(b':');
-
-    let mut depth: i32 = 0;
-    let mut p = 0usize;
-    while p < raw.len() {
-        match raw[p] {
-            b'{' => depth += 1,
-            b'}' => depth -= 1,
-            b'"' => {
-                if depth == 1 && p + needle.len() <= raw.len() && &raw[p..p + needle.len()] == needle.as_slice() {
-                    let val_start = p + needle.len();
-                    if raw.get(val_start) != Some(&b'[') {
-                        return None;
-                    }
-                    let mut adepth: i32 = 0;
-                    let mut q = val_start;
-                    while q < raw.len() {
-                        match raw[q] {
-                            b'[' => adepth += 1,
-                            b']' => {
-                                adepth -= 1;
-                                if adepth == 0 {
-                                    return Some((val_start, q + 1));
-                                }
-                            }
-                            b'"' => {
-                                q += 1;
-                                while q < raw.len() && raw[q] != b'"' {
-                                    if raw[q] == b'\\' { q += 1; }
-                                    q += 1;
-                                }
-                            }
-                            _ => {}
-                        }
-                        q += 1;
-                    }
-                    return None;
-                }
-                // Skip past string at any depth.
-                p += 1;
-                while p < raw.len() && raw[p] != b'"' {
-                    if raw[p] == b'\\' { p += 1; }
-                    p += 1;
-                }
-            }
-            _ => {}
-        }
-        p += 1;
-    }
-    None
-}
-
-/// Depth-1 brace scan over an array `[ {...}, {...}, ... ]`. Returns per-item (start, end_exclusive).
-fn brace_scan_items(raw: &[u8], arr_start: usize, arr_end: usize) -> Vec<(usize, usize)> {
-    let mut items = Vec::new();
-    let mut depth: i32 = 0;
-    let mut cur_start = 0usize;
-    let mut p = arr_start + 1;
-    while p + 1 < arr_end {
-        match raw[p] {
-            b'{' => {
-                if depth == 0 { cur_start = p; }
-                depth += 1;
-            }
-            b'}' => {
-                depth -= 1;
-                if depth == 0 {
-                    items.push((cur_start, p + 1));
-                }
-            }
-            b'"' => {
-                p += 1;
-                while p + 1 < arr_end && raw[p] != b'"' {
-                    if raw[p] == b'\\' { p += 1; }
-                    p += 1;
-                }
-            }
-            _ => {}
-        }
-        p += 1;
-    }
-    items
-}
-
-/* ----- level extraction + packing ----- */
-
+#[derive(Clone, Debug)]
 struct LevelEntry {
     byte_start: u32,
     byte_end: u32,
+    level_order: [u8; 4],
+    tcb_order: [u8; 3],
+    base_flags: u8,
+    sgx_svns: [u8; 16],
+    tdx_svns: [u8; 16],
+    pcesvn: u16,
     raw_tcb_date: [u8; 20],
-    packed: Vec<u8>,
+    status: u8,
+    advisories: Vec<Vec<u8>>,
+    sgx_layout: Vec<ComponentDescriptor>,
+    tdx_layout: Vec<ComponentDescriptor>,
 }
 
-fn extract_levels(raw: &[u8], arr_start: usize, arr_end: usize, version: u32) -> Result<Vec<LevelEntry>, String> {
-    let bounds = brace_scan_items(raw, arr_start, arr_end);
-    let mut out = Vec::with_capacity(bounds.len());
-    for (s, e) in bounds {
-        let level_bytes = &raw[s..e];
-        let level_json: Value =
-            serde_json::from_slice(level_bytes).map_err(|err| format!("level parse failed: {:?}", err))?;
-        let tcb = level_json
-            .get("tcb")
-            .ok_or_else(|| "level missing tcb".to_string())?;
-        let pcesvn = tcb.get("pcesvn").and_then(Value::as_u64).ok_or_else(|| "missing pcesvn".to_string())? as u16;
-        let (sgx_svns, tdx_svns) = extract_svns(tcb, version)?;
+#[derive(Clone, Debug)]
+struct NestedLevelEntry {
+    level_order: [u8; 4],
+    flags: u8,
+    isvsvn: u8,
+    raw_tcb_date: [u8; 20],
+    status: u8,
+    advisories: Vec<Vec<u8>>,
+}
 
-        let tcb_date_str = level_json
-            .get("tcbDate")
-            .and_then(Value::as_str)
-            .ok_or_else(|| "missing tcbDate".to_string())?;
-        if tcb_date_str.len() != 20 {
-            return Err(format!("unexpected tcbDate format: {}", tcb_date_str));
+#[derive(Clone, Debug)]
+struct IdentityEntry {
+    byte_start: u32,
+    byte_end: u32,
+    identity_order: [u8; 5],
+    id_raw: Vec<u8>,
+    mrsigner_hex: Vec<u8>,
+    attributes_hex: Vec<u8>,
+    attributes_mask_hex: Vec<u8>,
+    nested_levels: Vec<NestedLevelEntry>,
+}
+
+struct AsyncPlan {
+    basic_payload: Vec<u8>,
+    top_level_order: [u8; 11],
+    levels: Vec<LevelEntry>,
+    identities: Vec<IdentityEntry>,
+    has_tdx_components: bool,
+}
+
+fn build_async_plan(raw: &[u8], locator: TcbLocator) -> Result<AsyncPlan, String> {
+    let top_fields = parse_object_fields(raw, 0, raw.len())?;
+    let top_order = order_for_fields::<11>(&top_fields, &TOP_FIELDS)?;
+    validate_top_order(&top_order, locator.version, locator.tcb_type)?;
+
+    let tcb_levels_field = field(&top_fields, "tcbLevels")?;
+    let level_bounds = object_items_in_array(
+        raw,
+        tcb_levels_field.value_start,
+        tcb_levels_field.value_end,
+    )?;
+    let levels = extract_levels(raw, &level_bounds, locator.version)?;
+    if levels.is_empty() {
+        return Err("tcbLevels must not be empty".to_string());
+    }
+
+    let has_tdx_components = levels.iter().any(|level| !level.tdx_layout.is_empty());
+    if has_tdx_components && levels.iter().any(|level| level.tdx_layout.len() != 16) {
+        return Err(
+            "tdxtcbcomponents must be present in every level when any level has it".to_string(),
+        );
+    }
+
+    let identities = if let Some(ids_field) = maybe_field(&top_fields, "tdxModuleIdentities") {
+        let bounds = object_items_in_array(raw, ids_field.value_start, ids_field.value_end)?;
+        extract_identities(raw, &bounds)?
+    } else {
+        Vec::new()
+    };
+
+    let levels_stream_len = levels.iter().map(level_stream_item_len).sum::<usize>();
+    let identities_stream_len = identities
+        .iter()
+        .map(identity_stream_item_len)
+        .sum::<usize>();
+    let basic_payload = build_basic_payload(
+        raw,
+        &top_fields,
+        &top_order,
+        &levels,
+        &identities,
+        levels_stream_len,
+        identities_stream_len,
+        locator,
+    )?;
+
+    Ok(AsyncPlan {
+        basic_payload,
+        top_level_order: top_order,
+        levels,
+        identities,
+        has_tdx_components,
+    })
+}
+
+fn validate_top_order(order: &[u8; 11], version: u32, tcb_type: u8) -> Result<(), String> {
+    for i in [
+        TOP_VERSION,
+        TOP_ISSUE_DATE,
+        TOP_NEXT_UPDATE,
+        TOP_FMSPC,
+        TOP_PCE_ID,
+        TOP_TCB_TYPE,
+        TOP_EVAL_NUMBER,
+        TOP_TCB_LEVELS,
+    ] {
+        if order[i] == 0 {
+            return Err(format!(
+                "missing required top-level field {}",
+                TOP_FIELDS[i]
+            ));
         }
-        let mut raw_tcb_date = [0u8; 20];
-        raw_tcb_date.copy_from_slice(tcb_date_str.as_bytes());
-        let ts = iso_to_unix(tcb_date_str).ok_or_else(|| format!("bad tcbDate: {}", tcb_date_str))?;
+    }
+    if version >= 3 && order[TOP_ID] == 0 {
+        return Err("missing id in TCBInfo v3 payload".to_string());
+    }
+    if version < 3 && order[TOP_ID] != 0 {
+        return Err("TCBInfo v2 payload unexpectedly contains id".to_string());
+    }
+    if tcb_type == 1 {
+        if order[TOP_TDX_MODULE] == 0 || order[TOP_TDX_IDENTITIES] == 0 {
+            return Err("TDX TCBInfo must include tdxModule and tdxModuleIdentities".to_string());
+        }
+    } else if order[TOP_TDX_MODULE] != 0 || order[TOP_TDX_IDENTITIES] != 0 {
+        return Err("SGX TCBInfo must not include TDX module fields".to_string());
+    }
+    Ok(())
+}
 
-        let status_str = level_json
-            .get("tcbStatus")
-            .and_then(Value::as_str)
-            .ok_or_else(|| "missing tcbStatus".to_string())?;
+fn build_basic_payload(
+    raw: &[u8],
+    top_fields: &[JsonField],
+    top_order: &[u8; 11],
+    levels: &[LevelEntry],
+    identities: &[IdentityEntry],
+    levels_stream_len: usize,
+    identities_stream_len: usize,
+    locator: TcbLocator,
+) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    for key in TOP_FIELDS {
+        push_u32(
+            &mut out,
+            maybe_field(top_fields, key)
+                .map(|f| f.key_start)
+                .unwrap_or(0),
+            "top field offset",
+        )?;
+    }
+
+    let levels_field = field(top_fields, "tcbLevels")?;
+    push_u32(&mut out, levels_field.value_start, "tcbLevels start")?;
+    push_u32(&mut out, levels_field.value_end, "tcbLevels end")?;
+    push_u32(&mut out, levels.len(), "tcbLevels count")?;
+
+    if let Some(ids_field) = maybe_field(top_fields, "tdxModuleIdentities") {
+        push_u32(&mut out, ids_field.value_start, "tdxModuleIdentities start")?;
+        push_u32(&mut out, ids_field.value_end, "tdxModuleIdentities end")?;
+        push_u32(&mut out, identities.len(), "tdxModuleIdentities count")?;
+    } else {
+        out.extend_from_slice(&[0u8; 12]);
+    }
+
+    if let Some(module_field) = maybe_field(top_fields, "tdxModule") {
+        push_u32(&mut out, module_field.value_start, "tdxModule start")?;
+        push_u32(&mut out, module_field.value_end, "tdxModule end")?;
+    } else {
+        out.extend_from_slice(&[0u8; 8]);
+    }
+
+    push_u32(&mut out, levels_stream_len, "levels stream length")?;
+    push_u32(&mut out, identities_stream_len, "identities stream length")?;
+
+    let id_byte = if top_order[TOP_ID] != 0 {
+        let id_raw = string_contents(raw, field(top_fields, "id")?)?;
+        let parsed =
+            parse_tcb_type(std::str::from_utf8(&id_raw).map_err(|_| "id is not utf8".to_string())?);
+        if parsed != locator.tcb_type {
+            return Err("top-level id does not match selected platform".to_string());
+        }
+        parsed
+    } else {
+        locator.tcb_type
+    };
+    out.push(id_byte);
+
+    push_u32_value(&mut out, u32_field(raw, top_fields, "version")?);
+    push_fixed_string(&mut out, raw, top_fields, "issueDate", 20)?;
+    push_fixed_string(&mut out, raw, top_fields, "nextUpdate", 20)?;
+    push_fixed_string(&mut out, raw, top_fields, "fmspc", 12)?;
+    push_fixed_string(&mut out, raw, top_fields, "pceId", 4)?;
+    out.push(u8_field(raw, top_fields, "tcbType")?);
+    push_u32_value(
+        &mut out,
+        u32_field(raw, top_fields, "tcbEvaluationDataNumber")?,
+    );
+
+    if let Some(module_field) = maybe_field(top_fields, "tdxModule") {
+        let module_fields =
+            parse_object_fields(raw, module_field.value_start, module_field.value_end)?;
+        let module_order = order_for_fields::<3>(&module_fields, &TDX_MODULE_FIELDS)?;
+        out.push(1);
+        out.extend_from_slice(&module_order);
+        push_fixed_string_from_fields(&mut out, raw, &module_fields, "mrsigner", 96)?;
+        push_fixed_string_from_fields(&mut out, raw, &module_fields, "attributes", 16)?;
+        push_fixed_string_from_fields(&mut out, raw, &module_fields, "attributesMask", 16)?;
+    } else {
+        out.push(0);
+    }
+
+    Ok(out)
+}
+
+fn extract_levels(
+    raw: &[u8],
+    bounds: &[(usize, usize)],
+    version: u32,
+) -> Result<Vec<LevelEntry>, String> {
+    let mut out = Vec::with_capacity(bounds.len());
+    for &(start, end) in bounds {
+        let level_fields = parse_object_fields(raw, start, end)?;
+        let level_order = order_for_fields::<4>(&level_fields, &LEVEL_FIELDS)?;
+        let tcb_field = field(&level_fields, "tcb")?;
+        let tcb_fields = parse_object_fields(raw, tcb_field.value_start, tcb_field.value_end)?;
+
+        let mut base_flags = 0u8;
+        if maybe_field(&level_fields, "advisoryIDs").is_some() {
+            base_flags |= LEVEL_FLAG_HAS_ADVISORY_FIELD;
+        }
+
+        let (tcb_order, sgx_svns, tdx_svns, sgx_layout, tdx_layout, pcesvn) =
+            extract_tcb_object(raw, &tcb_fields, version)?;
+        let raw_tcb_date = fixed_string_array(raw, field(&level_fields, "tcbDate")?, 20)?;
+        let status_raw = string_contents(raw, field(&level_fields, "tcbStatus")?)?;
+        let status_str =
+            std::str::from_utf8(&status_raw).map_err(|_| "tcbStatus is not utf8".to_string())?;
         let status = status_string_to_enum(status_str)?;
-        let advisories = level_json
-            .get("advisoryIDs")
-            .and_then(Value::as_array)
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
-            .unwrap_or_default();
+        let advisories = if let Some(advisory_field) = maybe_field(&level_fields, "advisoryIDs") {
+            string_array(raw, advisory_field.value_start, advisory_field.value_end)?
+        } else {
+            Vec::new()
+        };
 
         out.push(LevelEntry {
-            byte_start: s as u32,
-            byte_end: e as u32,
+            byte_start: start as u32,
+            byte_end: end as u32,
+            level_order,
+            tcb_order,
+            base_flags,
+            sgx_svns,
+            tdx_svns,
+            pcesvn,
             raw_tcb_date,
-            packed: pack_tcb_level(pcesvn, ts, status, &sgx_svns, &tdx_svns, &advisories),
+            status,
+            advisories,
+            sgx_layout,
+            tdx_layout,
         });
     }
     Ok(out)
 }
 
-fn extract_svns(tcb: &Value, version: u32) -> Result<([u8; 16], [u8; 16]), String> {
-    let mut sgx = [0u8; 16];
-    let mut tdx = [0u8; 16];
+fn extract_tcb_object(
+    raw: &[u8],
+    tcb_fields: &[JsonField],
+    version: u32,
+) -> Result<
+    (
+        [u8; 3],
+        [u8; 16],
+        [u8; 16],
+        Vec<ComponentDescriptor>,
+        Vec<ComponentDescriptor>,
+        u16,
+    ),
+    String,
+> {
+    let pcesvn = u32_field_from_fields(raw, tcb_fields, "pcesvn")? as u16;
+    let mut sgx_svns = [0u8; 16];
+    let mut tdx_svns = [0u8; 16];
+    let mut sgx_layout = Vec::new();
+    let mut tdx_layout = Vec::new();
+
     if version >= 3 {
-        let sgx_arr = tcb
-            .get("sgxtcbcomponents")
-            .and_then(Value::as_array)
-            .ok_or_else(|| "missing sgxtcbcomponents".to_string())?;
-        if sgx_arr.len() != 16 { return Err("sgxtcbcomponents wrong size".to_string()); }
-        for (i, item) in sgx_arr.iter().enumerate() {
-            sgx[i] = item.get("svn").and_then(Value::as_u64).ok_or_else(|| "missing svn".to_string())? as u8;
+        let tcb_order = order_for_fields::<3>(tcb_fields, &TCB_FIELDS)?;
+        let sgx_field = field(tcb_fields, "sgxtcbcomponents")?;
+        let (svns, layout) =
+            extract_component_array(raw, sgx_field.value_start, sgx_field.value_end)?;
+        sgx_svns = svns;
+        sgx_layout = layout;
+        if let Some(tdx_field) = maybe_field(tcb_fields, "tdxtcbcomponents") {
+            let (svns, layout) =
+                extract_component_array(raw, tdx_field.value_start, tdx_field.value_end)?;
+            tdx_svns = svns;
+            tdx_layout = layout;
         }
-        if let Some(tdx_arr) = tcb.get("tdxtcbcomponents").and_then(Value::as_array) {
-            if tdx_arr.len() != 16 { return Err("tdxtcbcomponents wrong size".to_string()); }
-            for (i, item) in tdx_arr.iter().enumerate() {
-                tdx[i] = item.get("svn").and_then(Value::as_u64).ok_or_else(|| "missing svn".to_string())? as u8;
-            }
-        }
+        Ok((
+            tcb_order, sgx_svns, tdx_svns, sgx_layout, tdx_layout, pcesvn,
+        ))
     } else {
-        // v2 schema: flat sgxtcbcompXXsvn keys
         for i in 0..16 {
             let key = format!("sgxtcbcomp{:02}svn", i + 1);
-            sgx[i] = tcb.get(&key).and_then(Value::as_u64).ok_or_else(|| format!("missing {}", key))? as u8;
+            sgx_svns[i] = u32_field_from_fields(raw, tcb_fields, &key)? as u8;
         }
+        Ok((
+            [0, 0, 0],
+            sgx_svns,
+            tdx_svns,
+            sgx_layout,
+            tdx_layout,
+            pcesvn,
+        ))
     }
-    Ok((sgx, tdx))
 }
 
-/// Replicates `FmspcTcbHelper.tcbLevelsObjToBytes`: slot1(32) | slot2(32) | advisoryIDs joined by '\n'.
-fn pack_tcb_level(pcesvn: u16, tcb_date_ts: u64, status: u8, sgx: &[u8; 16], tdx: &[u8; 16], advisories: &[String]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(64);
-    // slot 1
-    let mut s1 = [0u8; 32];
-    s1[14..16].copy_from_slice(&pcesvn.to_be_bytes());
-    s1[16..24].copy_from_slice(&tcb_date_ts.to_be_bytes());
-    s1[31] = status;
-    out.extend_from_slice(&s1);
-    // slot 2
-    let mut s2 = [0u8; 32];
-    s2[0..16].copy_from_slice(sgx);
-    if tdx.iter().any(|b| *b != 0) {
-        s2[16..32].copy_from_slice(tdx);
-    } else {
-        // All-zero tdx svns: on-chain pack still writes them only if `tdxComponentCpuSvns.length > 0`.
-        // The off-chain parser only fills tdx when sgxtcbcomponents is present and tdxtcbcomponents
-        // had content. We mirror this by always-zero second half here; the on-chain serializer reads
-        // tdx slot regardless, but it will be all-zero in both places for SGX-only.
-        s2[16..32].copy_from_slice(tdx);
+fn extract_component_array(
+    raw: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<([u8; 16], Vec<ComponentDescriptor>), String> {
+    let bounds = object_items_in_array(raw, start, end)?;
+    if bounds.len() != 16 {
+        return Err(format!(
+            "component array has {} items, expected 16",
+            bounds.len()
+        ));
     }
-    out.extend_from_slice(&s2);
-    // advisoryIDs
-    if !advisories.is_empty() {
-        out.extend_from_slice(advisories.join("\n").as_bytes());
+
+    let mut svns = [0u8; 16];
+    let mut layout = Vec::with_capacity(16);
+    for (idx, (item_start, item_end)) in bounds.into_iter().enumerate() {
+        let fields = parse_object_fields(raw, item_start, item_end)?;
+        let order = order_for_fields::<3>(&fields, &COMPONENT_FIELDS)?;
+        svns[idx] = u32_field_from_fields(raw, &fields, "svn")? as u8;
+        let category = if let Some(field) = maybe_field(&fields, "category") {
+            string_contents(raw, field)?
+        } else {
+            Vec::new()
+        };
+        let component_type = if let Some(field) = maybe_field(&fields, "type") {
+            string_contents(raw, field)?
+        } else {
+            Vec::new()
+        };
+        layout.push(ComponentDescriptor {
+            svn_order: order[0],
+            category_order: order[1],
+            type_order: order[2],
+            category,
+            component_type,
+        });
+    }
+
+    Ok((svns, layout))
+}
+
+fn extract_identities(raw: &[u8], bounds: &[(usize, usize)]) -> Result<Vec<IdentityEntry>, String> {
+    let mut out = Vec::with_capacity(bounds.len());
+    for &(start, end) in bounds {
+        let fields = parse_object_fields(raw, start, end)?;
+        let identity_order = order_for_fields::<5>(&fields, &IDENTITY_FIELDS)?;
+        let levels_field = field(&fields, "tcbLevels")?;
+        let nested_bounds =
+            object_items_in_array(raw, levels_field.value_start, levels_field.value_end)?;
+        let nested_levels = extract_nested_levels(raw, &nested_bounds)?;
+
+        out.push(IdentityEntry {
+            byte_start: start as u32,
+            byte_end: end as u32,
+            identity_order,
+            id_raw: string_contents(raw, field(&fields, "id")?)?,
+            mrsigner_hex: fixed_string_vec(raw, field(&fields, "mrsigner")?, 96)?,
+            attributes_hex: fixed_string_vec(raw, field(&fields, "attributes")?, 16)?,
+            attributes_mask_hex: fixed_string_vec(raw, field(&fields, "attributesMask")?, 16)?,
+            nested_levels,
+        });
+    }
+    Ok(out)
+}
+
+fn extract_nested_levels(
+    raw: &[u8],
+    bounds: &[(usize, usize)],
+) -> Result<Vec<NestedLevelEntry>, String> {
+    let mut out = Vec::with_capacity(bounds.len());
+    for &(start, end) in bounds {
+        let level_fields = parse_object_fields(raw, start, end)?;
+        let level_order = order_for_fields::<4>(&level_fields, &LEVEL_FIELDS)?;
+        let mut flags = 0u8;
+        if maybe_field(&level_fields, "advisoryIDs").is_some() {
+            flags |= LEVEL_FLAG_HAS_ADVISORY_FIELD;
+        }
+
+        let tcb_field = field(&level_fields, "tcb")?;
+        let tcb_fields = parse_object_fields(raw, tcb_field.value_start, tcb_field.value_end)?;
+        if tcb_fields.len() != 1 || tcb_fields[0].key != "isvsvn" {
+            return Err("TDX module identity nested tcb must only contain isvsvn".to_string());
+        }
+
+        let raw_tcb_date = fixed_string_array(raw, field(&level_fields, "tcbDate")?, 20)?;
+        let status_raw = string_contents(raw, field(&level_fields, "tcbStatus")?)?;
+        let status_str = std::str::from_utf8(&status_raw)
+            .map_err(|_| "nested tcbStatus is not utf8".to_string())?;
+        let advisories = if let Some(advisory_field) = maybe_field(&level_fields, "advisoryIDs") {
+            string_array(raw, advisory_field.value_start, advisory_field.value_end)?
+        } else {
+            Vec::new()
+        };
+
+        out.push(NestedLevelEntry {
+            level_order,
+            flags,
+            isvsvn: u32_field_from_fields(raw, &tcb_fields, "isvsvn")? as u8,
+            raw_tcb_date,
+            status: status_string_to_enum(status_str)?,
+            advisories,
+        });
+    }
+    Ok(out)
+}
+
+/* ----- binary payload builders ----- */
+
+fn build_level_batch_payload(
+    levels: &[LevelEntry],
+    has_tdx_components: bool,
+    version: u32,
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.push(if has_tdx_components { 1 } else { 0 });
+
+    let sgx_header = if version >= 3 {
+        Some(&levels[0].sgx_layout)
+    } else {
+        None
+    };
+    let tdx_header = if version >= 3 && has_tdx_components {
+        Some(&levels[0].tdx_layout)
+    } else {
+        None
+    };
+
+    if let Some(layout) = sgx_header {
+        append_component_layout(&mut out, layout);
+    }
+    if let Some(layout) = tdx_header {
+        append_component_layout(&mut out, layout);
+    }
+
+    for level in levels {
+        push_u32_value(&mut out, level.byte_start);
+        push_u32_value(&mut out, level.byte_end);
+        out.extend_from_slice(&level.level_order);
+        out.extend_from_slice(&level.tcb_order);
+        let mut flags = level.base_flags;
+        // Keep batch headers as the common case, but attach a per-level descriptor
+        // when Intel returns a valid level whose component metadata order differs.
+        if let Some(layout) = sgx_header {
+            if level.sgx_layout != *layout {
+                flags |= LEVEL_FLAG_SGX_LAYOUT_OVERRIDE;
+            }
+        }
+        if let Some(layout) = tdx_header {
+            if level.tdx_layout != *layout {
+                flags |= LEVEL_FLAG_TDX_LAYOUT_OVERRIDE;
+            }
+        }
+        out.push(flags);
+        out.extend_from_slice(&level.sgx_svns);
+        if has_tdx_components {
+            out.extend_from_slice(&level.tdx_svns);
+        }
+        push_u32_value(&mut out, level.pcesvn as u32);
+        out.extend_from_slice(&level.raw_tcb_date);
+        out.push(level.status);
+        append_bytes_array(&mut out, &level.advisories);
+
+        if flags & LEVEL_FLAG_SGX_LAYOUT_OVERRIDE != 0 {
+            append_component_layout(&mut out, &level.sgx_layout);
+        }
+        if flags & LEVEL_FLAG_TDX_LAYOUT_OVERRIDE != 0 {
+            append_component_layout(&mut out, &level.tdx_layout);
+        }
+    }
+
+    out
+}
+
+fn build_identity_batch_payload(identities: &[IdentityEntry]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for identity in identities {
+        push_u32_value(&mut out, identity.byte_start);
+        push_u32_value(&mut out, identity.byte_end);
+        out.extend_from_slice(&identity.identity_order);
+        out.push(identity.id_raw.len() as u8);
+        out.extend_from_slice(&identity.id_raw);
+        out.extend_from_slice(&identity.mrsigner_hex);
+        out.extend_from_slice(&identity.attributes_hex);
+        out.extend_from_slice(&identity.attributes_mask_hex);
+        push_u32_value(&mut out, identity.nested_levels.len() as u32);
+
+        for level in &identity.nested_levels {
+            out.extend_from_slice(&level.level_order);
+            out.push(level.flags);
+            out.push(level.isvsvn);
+            out.extend_from_slice(&level.raw_tcb_date);
+            out.push(level.status);
+            append_bytes_array(&mut out, &level.advisories);
+        }
     }
     out
 }
 
-fn build_level_stream(levels: &[LevelEntry], _has_tdx: bool) -> Vec<u8> {
-    let mut stream = Vec::new();
-    for level in levels {
-        stream.extend_from_slice(&(level.packed.len() as u32).to_be_bytes());
-        stream.extend_from_slice(&level.packed);
-        stream.extend_from_slice(&level.byte_start.to_be_bytes());
-        stream.extend_from_slice(&level.byte_end.to_be_bytes());
-        stream.extend_from_slice(&level.raw_tcb_date);
+fn append_component_layout(out: &mut Vec<u8>, layout: &[ComponentDescriptor]) {
+    assert_eq!(
+        layout.len(),
+        16,
+        "component layout must have 16 descriptors"
+    );
+    for descriptor in layout {
+        out.push(descriptor.svn_order);
+        out.push(descriptor.category_order);
+        out.push(descriptor.type_order);
+        append_u16_bytes(out, &descriptor.category);
+        append_u16_bytes(out, &descriptor.component_type);
     }
-    stream
 }
 
-/* ----- identity extraction + packing ----- */
-
-struct IdentityEntry {
-    byte_start: u32,
-    byte_end: u32,
-    packed: Vec<u8>,
-    raw_mrsigner_hex: [u8; 96],
-    raw_attr_hex: [u8; 16],
-    raw_attr_mask_hex: [u8; 16],
-    nested_dates: Vec<[u8; 20]>,
-    nested_advisories: Vec<Vec<String>>,
+fn append_bytes_array(out: &mut Vec<u8>, values: &[Vec<u8>]) {
+    push_u32_value(out, values.len() as u32);
+    for value in values {
+        append_u16_bytes(out, value);
+    }
 }
 
-fn extract_identities(raw: &[u8], arr_start: usize, arr_end: usize) -> Result<Vec<IdentityEntry>, String> {
-    let bounds = brace_scan_items(raw, arr_start, arr_end);
-    let mut out = Vec::with_capacity(bounds.len());
-    for (s, e) in bounds {
-        let bytes = &raw[s..e];
-        let id_json: Value = serde_json::from_slice(bytes).map_err(|err| format!("identity parse failed: {:?}", err))?;
+fn append_u16_bytes(out: &mut Vec<u8>, value: &[u8]) {
+    assert!(value.len() <= u16::MAX as usize, "string item too long");
+    out.extend_from_slice(&(value.len() as u16).to_be_bytes());
+    out.extend_from_slice(value);
+}
 
-        let id_str = id_json.get("id").and_then(Value::as_str).ok_or_else(|| "missing id".to_string())?;
-        let mrsigner_hex_str =
-            id_json.get("mrsigner").and_then(Value::as_str).ok_or_else(|| "missing mrsigner".to_string())?;
-        let attr_hex_str =
-            id_json.get("attributes").and_then(Value::as_str).ok_or_else(|| "missing attributes".to_string())?;
-        let attr_mask_hex_str = id_json
-            .get("attributesMask")
-            .and_then(Value::as_str)
-            .ok_or_else(|| "missing attributesMask".to_string())?;
-        let mrsigner_bytes = hex::decode(mrsigner_hex_str).map_err(|err| format!("bad mrsigner hex: {:?}", err))?;
-        if mrsigner_bytes.len() != 48 { return Err("mrsigner wrong length".to_string()); }
-        let attr_bytes = hex::decode(attr_hex_str).map_err(|err| format!("bad attributes hex: {:?}", err))?;
-        if attr_bytes.len() != 8 { return Err("attributes wrong length".to_string()); }
-        let attr_mask_bytes =
-            hex::decode(attr_mask_hex_str).map_err(|err| format!("bad attributesMask hex: {:?}", err))?;
-        if attr_mask_bytes.len() != 8 { return Err("attributesMask wrong length".to_string()); }
+fn level_stream_item_len(level: &LevelEntry) -> usize {
+    4 + TCB_LEVEL_PACKED_BASE_LEN + joined_advisory_len(&level.advisories)
+}
 
-        let nested = id_json
-            .get("tcbLevels")
-            .and_then(Value::as_array)
-            .ok_or_else(|| "missing nested tcbLevels".to_string())?;
-        let mut nested_packed = Vec::new();
-        let mut nested_dates = Vec::new();
-        let mut nested_advisories: Vec<Vec<String>> = Vec::new();
-        for lvl in nested {
-            let tcb = lvl.get("tcb").ok_or_else(|| "nested missing tcb".to_string())?;
-            let isvsvn = tcb.get("isvsvn").and_then(Value::as_u64).ok_or_else(|| "missing isvsvn".to_string())? as u8;
-            let date_str = lvl.get("tcbDate").and_then(Value::as_str).ok_or_else(|| "missing nested tcbDate".to_string())?;
-            if date_str.len() != 20 { return Err("nested tcbDate wrong length".to_string()); }
-            let mut date_arr = [0u8; 20];
-            date_arr.copy_from_slice(date_str.as_bytes());
-            let ts = iso_to_unix(date_str).ok_or_else(|| "nested tcbDate parse failed".to_string())?;
-            let status_str = lvl.get("tcbStatus").and_then(Value::as_str).ok_or_else(|| "missing nested tcbStatus".to_string())?;
-            let status = status_string_to_enum(status_str)?;
+fn identity_stream_item_len(identity: &IdentityEntry) -> usize {
+    4 + TDX_IDENTITY_PACKED_BASE_LEN + 32 * identity.nested_levels.len()
+}
 
-            // Pack nested slot: (isvsvn << 128) | (ts << 64) | status
-            let mut slot = [0u8; 32];
-            slot[15] = isvsvn;
-            slot[16..24].copy_from_slice(&ts.to_be_bytes());
-            slot[31] = status;
-            nested_packed.extend_from_slice(&slot);
-            nested_dates.push(date_arr);
+fn joined_advisory_len(values: &[Vec<u8>]) -> usize {
+    let bytes = values.iter().map(Vec::len).sum::<usize>();
+    if values.is_empty() {
+        bytes
+    } else {
+        bytes + values.len() - 1
+    }
+}
 
-            let advisories = lvl
-                .get("advisoryIDs")
-                .and_then(Value::as_array)
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
-                .unwrap_or_default();
-            nested_advisories.push(advisories);
+fn push_fixed_string(
+    out: &mut Vec<u8>,
+    raw: &[u8],
+    fields: &[JsonField],
+    key: &str,
+    len: usize,
+) -> Result<(), String> {
+    let value = fixed_string_vec(raw, field(fields, key)?, len)?;
+    out.extend_from_slice(&value);
+    Ok(())
+}
+
+fn push_fixed_string_from_fields(
+    out: &mut Vec<u8>,
+    raw: &[u8],
+    fields: &[JsonField],
+    key: &str,
+    len: usize,
+) -> Result<(), String> {
+    let value = fixed_string_vec(raw, field(fields, key)?, len)?;
+    out.extend_from_slice(&value);
+    Ok(())
+}
+
+fn push_u32(out: &mut Vec<u8>, value: usize, label: &str) -> Result<(), String> {
+    let value = u32::try_from(value).map_err(|_| format!("{} does not fit into u32", label))?;
+    push_u32_value(out, value);
+    Ok(())
+}
+
+fn push_u32_value(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_be_bytes());
+}
+
+/* ----- JSON byte scanner ----- */
+
+fn parse_object_fields(raw: &[u8], start: usize, end: usize) -> Result<Vec<JsonField>, String> {
+    if raw.get(start) != Some(&b'{')
+        || raw.get(
+            end.checked_sub(1)
+                .ok_or_else(|| "empty object range".to_string())?,
+        ) != Some(&b'}')
+    {
+        return Err(format!("expected object at {}..{}", start, end));
+    }
+
+    let mut fields = Vec::new();
+    let mut p = skip_ws(raw, start + 1);
+    while p < end - 1 {
+        let key_start = p;
+        let (key, key_end) = parse_string_key(raw, p)?;
+        p = skip_ws(raw, key_end);
+        if raw.get(p) != Some(&b':') {
+            return Err(format!("expected ':' after key {}", key));
         }
-
-        // Pack identity per FmspcTcbHelper.tdxModuleIdentityToBytes: slot1 packOne(id), slot2 mrsigner[0..32],
-        // slot3 mrsigner[32..48] + 16 zero bytes, slot4 attributes(high8)|attributesMask(at[16..24]), then nested slots.
-        let mut packed = Vec::with_capacity(128 + nested_packed.len());
-        packed.extend_from_slice(&pack_one(id_str));
-        packed.extend_from_slice(&mrsigner_bytes[0..32]);
-        let mut s3 = [0u8; 32];
-        s3[0..16].copy_from_slice(&mrsigner_bytes[32..48]);
-        packed.extend_from_slice(&s3);
-        let mut s4 = [0u8; 32];
-        s4[0..8].copy_from_slice(&attr_bytes);
-        s4[16..24].copy_from_slice(&attr_mask_bytes);
-        packed.extend_from_slice(&s4);
-        packed.extend_from_slice(&nested_packed);
-
-        let mut mrsigner_hex_arr = [0u8; 96];
-        mrsigner_hex_arr.copy_from_slice(mrsigner_hex_str.as_bytes());
-        let mut attr_hex_arr = [0u8; 16];
-        attr_hex_arr.copy_from_slice(attr_hex_str.as_bytes());
-        let mut attr_mask_hex_arr = [0u8; 16];
-        attr_mask_hex_arr.copy_from_slice(attr_mask_hex_str.as_bytes());
-
-        out.push(IdentityEntry {
-            byte_start: s as u32,
-            byte_end: e as u32,
-            packed,
-            raw_mrsigner_hex: mrsigner_hex_arr,
-            raw_attr_hex: attr_hex_arr,
-            raw_attr_mask_hex: attr_mask_hex_arr,
-            nested_dates,
-            nested_advisories,
+        p = skip_ws(raw, p + 1);
+        let value_start = p;
+        let value_end = find_value_end(raw, value_start)?;
+        fields.push(JsonField {
+            key,
+            key_start,
+            value_start,
+            value_end,
         });
-    }
-    Ok(out)
-}
-
-fn build_identity_stream(identities: &[IdentityEntry]) -> Vec<u8> {
-    let mut stream = Vec::new();
-    for id in identities {
-        stream.extend_from_slice(&(id.packed.len() as u32).to_be_bytes());
-        stream.extend_from_slice(&id.packed);
-        stream.extend_from_slice(&id.byte_start.to_be_bytes());
-        stream.extend_from_slice(&id.byte_end.to_be_bytes());
-        stream.extend_from_slice(&id.raw_mrsigner_hex);
-        stream.extend_from_slice(&id.raw_attr_hex);
-        stream.extend_from_slice(&id.raw_attr_mask_hex);
-        stream.extend_from_slice(&(id.nested_dates.len() as u32).to_be_bytes());
-        for (j, date) in id.nested_dates.iter().enumerate() {
-            stream.extend_from_slice(date);
-            let advisories = &id.nested_advisories[j];
-            stream.extend_from_slice(&(advisories.len() as u16).to_be_bytes());
-            for adv in advisories {
-                stream.extend_from_slice(&(adv.len() as u16).to_be_bytes());
-                stream.extend_from_slice(adv.as_bytes());
+        p = skip_ws(raw, value_end);
+        if p < end - 1 {
+            if raw[p] != b',' {
+                return Err(format!("expected ',' in object at byte {}", p));
             }
+            p = skip_ws(raw, p + 1);
         }
     }
-    stream
+    Ok(fields)
 }
 
-/* ----- components template extraction ----- */
-
-fn extract_components_template(raw: &[u8], start: u32, end: u32, key: &[u8]) -> Option<Vec<u8>> {
-    let start = start as usize;
-    let end = end as usize;
-    let mut p = start;
-    while p + key.len() <= end {
-        if &raw[p..p + key.len()] == key {
-            let val_start = p + key.len();
-            if raw.get(val_start) != Some(&b'[') { return None; }
-            let mut depth: i32 = 0;
-            let mut q = val_start;
-            while q < end {
-                match raw[q] {
-                    b'[' => depth += 1,
-                    b']' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            return Some(raw[val_start..q + 1].to_vec());
-                        }
-                    }
-                    b'"' => {
-                        q += 1;
-                        while q < end && raw[q] != b'"' {
-                            if raw[q] == b'\\' { q += 1; }
-                            q += 1;
-                        }
-                    }
-                    _ => {}
-                }
-                q += 1;
+fn parse_string_key(raw: &[u8], start: usize) -> Result<(String, usize), String> {
+    if raw.get(start) != Some(&b'"') {
+        return Err(format!("expected string key at byte {}", start));
+    }
+    let mut p = start + 1;
+    while p < raw.len() {
+        match raw[p] {
+            b'\\' => return Err("escaped object keys are not supported".to_string()),
+            b'"' => {
+                let key = std::str::from_utf8(&raw[start + 1..p])
+                    .map_err(|_| "object key is not utf8".to_string())?
+                    .to_string();
+                return Ok((key, p + 1));
             }
-            return None;
+            _ => p += 1,
+        }
+    }
+    Err("unterminated string key".to_string())
+}
+
+fn find_value_end(raw: &[u8], start: usize) -> Result<usize, String> {
+    match raw.get(start).copied() {
+        Some(b'"') => {
+            let mut p = start + 1;
+            while p < raw.len() {
+                if raw[p] == b'\\' {
+                    p += 2;
+                    continue;
+                }
+                if raw[p] == b'"' {
+                    return Ok(p + 1);
+                }
+                p += 1;
+            }
+            Err("unterminated string value".to_string())
+        }
+        Some(b'{') => find_matching(raw, start, b'{', b'}').map(|p| p + 1),
+        Some(b'[') => find_matching(raw, start, b'[', b']').map(|p| p + 1),
+        Some(_) => {
+            let mut p = start;
+            while p < raw.len() && !matches!(raw[p], b',' | b'}' | b']') {
+                p += 1;
+            }
+            Ok(p)
+        }
+        None => Err("value starts past end of raw".to_string()),
+    }
+}
+
+fn find_matching(raw: &[u8], start: usize, open: u8, close: u8) -> Result<usize, String> {
+    let mut depth = 0i32;
+    let mut p = start;
+    while p < raw.len() {
+        match raw[p] {
+            b'"' => {
+                p += 1;
+                while p < raw.len() {
+                    if raw[p] == b'\\' {
+                        p += 2;
+                        continue;
+                    }
+                    if raw[p] == b'"' {
+                        break;
+                    }
+                    p += 1;
+                }
+            }
+            c if c == open => depth += 1,
+            c if c == close => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(p);
+                }
+            }
+            _ => {}
         }
         p += 1;
     }
-    None
+    Err(format!("unable to find matching {}", close as char))
 }
 
-/* ----- helpers: status enum, ISO date, packOne ----- */
+fn object_items_in_array(
+    raw: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<Vec<(usize, usize)>, String> {
+    if raw.get(start) != Some(&b'[')
+        || raw.get(
+            end.checked_sub(1)
+                .ok_or_else(|| "empty array range".to_string())?,
+        ) != Some(&b']')
+    {
+        return Err(format!("expected array at {}..{}", start, end));
+    }
+    let mut items = Vec::new();
+    let mut p = skip_ws(raw, start + 1);
+    while p < end - 1 {
+        if raw.get(p) != Some(&b'{') {
+            return Err(format!("expected object array item at byte {}", p));
+        }
+        let item_end = find_matching(raw, p, b'{', b'}')? + 1;
+        items.push((p, item_end));
+        p = skip_ws(raw, item_end);
+        if p < end - 1 {
+            if raw[p] != b',' {
+                return Err(format!("expected ',' after array item at byte {}", p));
+            }
+            p = skip_ws(raw, p + 1);
+        }
+    }
+    Ok(items)
+}
+
+fn string_array(raw: &[u8], start: usize, end: usize) -> Result<Vec<Vec<u8>>, String> {
+    if raw.get(start) != Some(&b'[')
+        || raw.get(
+            end.checked_sub(1)
+                .ok_or_else(|| "empty string array".to_string())?,
+        ) != Some(&b']')
+    {
+        return Err(format!("expected string array at {}..{}", start, end));
+    }
+    let mut values = Vec::new();
+    let mut p = skip_ws(raw, start + 1);
+    while p < end - 1 {
+        if raw.get(p) != Some(&b'"') {
+            return Err(format!("expected string array item at byte {}", p));
+        }
+        let value_end = find_value_end(raw, p)?;
+        values.push(unquoted_string(raw, p, value_end)?);
+        p = skip_ws(raw, value_end);
+        if p < end - 1 {
+            if raw[p] != b',' {
+                return Err(format!("expected ',' in string array at byte {}", p));
+            }
+            p = skip_ws(raw, p + 1);
+        }
+    }
+    Ok(values)
+}
+
+fn skip_ws(raw: &[u8], mut p: usize) -> usize {
+    while p < raw.len() && matches!(raw[p], b' ' | b'\n' | b'\r' | b'\t') {
+        p += 1;
+    }
+    p
+}
+
+fn order_for_fields<const N: usize>(
+    fields: &[JsonField],
+    keys: &[&str; N],
+) -> Result<[u8; N], String> {
+    let mut order = [0u8; N];
+    for (pos, field) in fields.iter().enumerate() {
+        let idx = keys
+            .iter()
+            .position(|key| *key == field.key)
+            .ok_or_else(|| format!("unsupported JSON field {}", field.key))?;
+        order[idx] = u8::try_from(pos + 1).map_err(|_| "field order exceeds u8".to_string())?;
+    }
+    Ok(order)
+}
+
+fn field<'a>(fields: &'a [JsonField], key: &str) -> Result<&'a JsonField, String> {
+    maybe_field(fields, key).ok_or_else(|| format!("missing field {}", key))
+}
+
+fn maybe_field<'a>(fields: &'a [JsonField], key: &str) -> Option<&'a JsonField> {
+    fields.iter().find(|field| field.key == key)
+}
+
+fn string_contents(raw: &[u8], field: &JsonField) -> Result<Vec<u8>, String> {
+    unquoted_string(raw, field.value_start, field.value_end)
+}
+
+fn unquoted_string(raw: &[u8], start: usize, end: usize) -> Result<Vec<u8>, String> {
+    if raw.get(start) != Some(&b'"')
+        || raw.get(
+            end.checked_sub(1)
+                .ok_or_else(|| "empty string range".to_string())?,
+        ) != Some(&b'"')
+    {
+        return Err(format!("expected quoted string at {}..{}", start, end));
+    }
+    let inner = &raw[start + 1..end - 1];
+    if inner.iter().any(|b| *b == b'\\') {
+        return Err(
+            "escaped JSON strings are not supported by async V2 raw reconstruction".to_string(),
+        );
+    }
+    Ok(inner.to_vec())
+}
+
+fn fixed_string_vec(raw: &[u8], field: &JsonField, len: usize) -> Result<Vec<u8>, String> {
+    let bytes = string_contents(raw, field)?;
+    if bytes.len() != len {
+        return Err(format!(
+            "field {} has len {}, expected {}",
+            field.key,
+            bytes.len(),
+            len
+        ));
+    }
+    Ok(bytes)
+}
+
+fn fixed_string_array<const N: usize>(
+    raw: &[u8],
+    field: &JsonField,
+    len: usize,
+) -> Result<[u8; N], String> {
+    let bytes = fixed_string_vec(raw, field, len)?;
+    bytes
+        .try_into()
+        .map_err(|_| format!("field {} wrong fixed length", field.key))
+}
+
+fn u32_field(raw: &[u8], fields: &[JsonField], key: &str) -> Result<u32, String> {
+    u32_field_from_fields(raw, fields, key)
+}
+
+fn u32_field_from_fields(raw: &[u8], fields: &[JsonField], key: &str) -> Result<u32, String> {
+    let f = field(fields, key)?;
+    let value: u64 = serde_json::from_slice(&raw[f.value_start..f.value_end])
+        .map_err(|err| format!("{} is not an unsigned integer: {:?}", key, err))?;
+    u32::try_from(value).map_err(|_| format!("{} does not fit into u32", key))
+}
+
+fn u8_field(raw: &[u8], fields: &[JsonField], key: &str) -> Result<u8, String> {
+    let value = u32_field_from_fields(raw, fields, key)?;
+    u8::try_from(value).map_err(|_| format!("{} does not fit into u8", key))
+}
+
+/* ----- status enum, ISO date, pack helpers ----- */
 
 fn status_string_to_enum(s: &str) -> Result<u8, String> {
     Ok(match s {
@@ -849,45 +1378,6 @@ fn status_string_to_enum(s: &str) -> Result<u8, String> {
         "Revoked" => 6,
         other => return Err(format!("unknown tcbStatus: {}", other)),
     })
-}
-
-/// Parse `"YYYY-MM-DDTHH:MM:SSZ"` to a unix timestamp (seconds since 1970-01-01 UTC).
-fn iso_to_unix(s: &str) -> Option<u64> {
-    let b = s.as_bytes();
-    if b.len() != 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' || b[19] != b'Z' {
-        return None;
-    }
-    let n = |o: usize, l: usize| -> Option<u64> {
-        let s = std::str::from_utf8(&b[o..o + l]).ok()?;
-        s.parse::<u64>().ok()
-    };
-    let y = n(0, 4)?;
-    let m = n(5, 2)?;
-    let d = n(8, 2)?;
-    let h = n(11, 2)?;
-    let min = n(14, 2)?;
-    let sec = n(17, 2)?;
-    Some(days_from_civil(y, m, d) * 86400 + h * 3600 + min * 60 + sec)
-}
-
-/// Howard Hinnant's date algorithm: days since 1970-01-01 for civil (y, m, d).
-fn days_from_civil(y: u64, m: u64, d: u64) -> u64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = y / 400;
-    let yoe = y - era * 400;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
-}
-
-/// Solady LibString.packOne layout: byte0 = length, byte1..length+1 = string data, rest zero.
-fn pack_one(s: &str) -> [u8; 32] {
-    let b = s.as_bytes();
-    assert!(b.len() < 32, "id too long for packOne");
-    let mut out = [0u8; 32];
-    out[0] = b.len() as u8;
-    out[1..1 + b.len()].copy_from_slice(b);
-    out
 }
 
 pub(crate) async fn send_transaction<M, D>(
@@ -908,7 +1398,12 @@ where
 
     match call.gas(gas_with_buf).send().await {
         Ok(pending_tx) => {
-            log::info!("{} txn[{}] hash: {:?}", log_prefix, label, pending_tx.tx_hash());
+            log::info!(
+                "{} txn[{}] hash: {:?}",
+                log_prefix,
+                label,
+                pending_tx.tx_hash()
+            );
             match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
                 Ok(Ok(receipt)) => {
                     log::info!("{} txn[{}] receipt: {:?}", log_prefix, label, receipt);
@@ -934,7 +1429,12 @@ where
                     }
                 }
                 Ok(Err(err)) => {
-                    log::error!("{} txn[{}] receipt meet error: {:?}", log_prefix, label, err);
+                    log::error!(
+                        "{} txn[{}] receipt meet error: {:?}",
+                        log_prefix,
+                        label,
+                        err
+                    );
                     false
                 }
                 Err(_) => {
@@ -987,17 +1487,13 @@ where
 }
 
 pub(crate) fn extract_tcb_info_str(raw_json: &str) -> Result<String, String> {
-    let start = r#""tcbInfo":"#;
-    let end = r#","signature""#;
     let trimmed = raw_json.trim();
-    let start_idx = trimmed
-        .find(start)
-        .ok_or_else(|| "unexpected tcb payload prefix".to_string())?;
-    let tail = &trimmed[start_idx + start.len()..];
-    let end_idx = tail
-        .find(end)
-        .ok_or_else(|| "unable to locate signature delimiter".to_string())?;
-    Ok(tail[..end_idx].to_string())
+    let raw = trimmed.as_bytes();
+    let fields = parse_object_fields(raw, 0, raw.len())?;
+    let tcb_info = field(&fields, "tcbInfo")?;
+    std::str::from_utf8(&raw[tcb_info.value_start..tcb_info.value_end])
+        .map(|s| s.to_string())
+        .map_err(|_| "inner tcbInfo is not utf8".to_string())
 }
 
 pub(crate) fn parse_tcb_type(value: &str) -> u8 {
@@ -1035,109 +1531,78 @@ pub(crate) fn generate_ref_id(locator: TcbLocator, tcb_info_obj: &TcbInfoJsonObj
 mod tests {
     use super::*;
 
-    /// Minimal SGX v3 inner tcbInfo with 1 level — sanity-check that brace scanner finds the
-    /// outer tcbLevels array bounds and the per-level boundaries inside it.
-    const SGX_V3_INNER: &str = r#"{"id":"SGX","version":3,"issueDate":"2024-07-03T13:09:33Z","nextUpdate":"2024-08-02T13:09:33Z","fmspc":"10A06D070000","pceId":"0000","tcbType":0,"tcbEvaluationDataNumber":16,"tcbLevels":[{"tcb":{"sgxtcbcomponents":[{"svn":1,"category":"BIOS","type":"Early Microcode Update"},{"svn":1,"category":"OS/VMM","type":"SGX Late Microcode Update"},{"svn":0,"category":"OS/VMM","type":"TXT SINIT"},{"svn":0,"category":"BIOS"},{"svn":1,"category":"BIOS"},{"svn":255,"category":"BIOS"},{"svn":0},{"svn":1,"category":"OS/VMM","type":"SEAMLDR ACM"},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0}],"pcesvn":13},"tcbDate":"2023-08-09T00:00:00Z","tcbStatus":"UpToDate"}]}"#;
+    const COMPONENTS_A: &str = r#"[{"svn":1,"category":"BIOS","type":"Early Microcode Update"},{"svn":1,"category":"OS/VMM","type":"SGX Late Microcode Update"},{"svn":0,"category":"OS/VMM","type":"TXT SINIT"},{"svn":0,"category":"BIOS"},{"svn":1,"category":"BIOS"},{"svn":255,"category":"BIOS"},{"svn":0},{"svn":1,"category":"OS/VMM","type":"SEAMLDR ACM"},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0}]"#;
+    const COMPONENTS_B: &str = r#"[{"category":"BIOS","svn":1,"type":"Early Microcode Update"},{"svn":1,"category":"OS/VMM","type":"SGX Late Microcode Update"},{"svn":0,"category":"OS/VMM","type":"TXT SINIT"},{"svn":0,"category":"BIOS"},{"svn":1,"category":"BIOS"},{"svn":255,"category":"BIOS"},{"svn":0},{"svn":1,"category":"OS/VMM","type":"SEAMLDR ACM"},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0}]"#;
+
+    fn sgx_inner_with_two_levels() -> String {
+        format!(
+            r#"{{"id":"SGX","version":3,"issueDate":"2024-07-03T13:09:33Z","nextUpdate":"2024-08-02T13:09:33Z","fmspc":"10A06D070000","pceId":"0000","tcbType":0,"tcbEvaluationDataNumber":16,"tcbLevels":[{{"tcb":{{"sgxtcbcomponents":{},"pcesvn":13}},"tcbDate":"2023-08-09T00:00:00Z","tcbStatus":"UpToDate"}},{{"tcb":{{"sgxtcbcomponents":{},"pcesvn":12}},"tcbDate":"2023-08-10T00:00:00Z","tcbStatus":"ConfigurationNeeded","advisoryIDs":["INTEL-SA-00001"]}}]}}"#,
+            COMPONENTS_A, COMPONENTS_B
+        )
+    }
+
+    const TDX_INNER: &str = r#"{"id":"TDX","version":3,"issueDate":"2024-07-03T13:09:33Z","nextUpdate":"2024-08-02T13:09:33Z","fmspc":"10A06D070000","pceId":"0000","tcbType":0,"tcbEvaluationDataNumber":16,"tdxModule":{"mrsigner":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","attributes":"0000000000000000","attributesMask":"ffffffffffffffff"},"tdxModuleIdentities":[{"id":"TDX_01","mrsigner":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","attributes":"0000000000000000","attributesMask":"ffffffffffffffff","tcbLevels":[{"tcb":{"isvsvn":1},"tcbDate":"2023-08-09T00:00:00Z","tcbStatus":"UpToDate","advisoryIDs":[]}]}],"tcbLevels":[{"tcb":{"sgxtcbcomponents":[{"svn":1},{"svn":1},{"svn":0},{"svn":0},{"svn":1},{"svn":255},{"svn":0},{"svn":1},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0}],"pcesvn":13,"tdxtcbcomponents":[{"svn":1},{"svn":1},{"svn":0},{"svn":0},{"svn":1},{"svn":255},{"svn":0},{"svn":1},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0},{"svn":0}]},"tcbDate":"2023-08-09T00:00:00Z","tcbStatus":"UpToDate"}]}"#;
 
     #[test]
-    fn finds_outer_tcb_levels_array() {
-        let raw = SGX_V3_INNER.as_bytes();
-        let (s, e) = find_top_level_array(raw, b"tcbLevels").expect("must locate outer array");
-        assert_eq!(raw[s], b'[');
-        assert_eq!(raw[e - 1], b']');
-        // No tdxModuleIdentities in SGX-only fixture.
-        assert!(find_top_level_array(raw, b"tdxModuleIdentities").is_none());
+    fn extracts_inner_tcb_info_from_wrapper() {
+        let wrapped = r#"{"tcbInfo":{"id":"SGX","version":3,"issueDate":"2024-01-01T00:00:00Z","nextUpdate":"2024-02-01T00:00:00Z","fmspc":"10A06D070000","pceId":"0000","tcbType":0,"tcbEvaluationDataNumber":1,"tcbLevels":[]},"signature":"aa"}"#;
+        let inner = extract_tcb_info_str(wrapped).unwrap();
+        assert!(inner.starts_with(r#"{"id":"SGX""#));
+        assert!(inner.ends_with(r#""tcbLevels":[]}"#));
     }
 
     #[test]
-    fn brace_scans_single_level() {
-        let raw = SGX_V3_INNER.as_bytes();
-        let (s, e) = find_top_level_array(raw, b"tcbLevels").unwrap();
-        let items = brace_scan_items(raw, s, e);
-        assert_eq!(items.len(), 1);
-        // The item's content must start with `{` and end with `}`.
-        let (start, end) = items[0];
-        assert_eq!(raw[start], b'{');
-        assert_eq!(raw[end - 1], b'}');
-    }
+    fn builds_sgx_plan_and_component_override_payload() {
+        let raw = sgx_inner_with_two_levels();
+        let plan = build_async_plan(
+            raw.as_bytes(),
+            TcbLocator {
+                tcb_type: 0,
+                fmspc: hex::decode("10A06D070000").unwrap().try_into().unwrap(),
+                version: 3,
+            },
+        )
+        .unwrap();
+        assert_eq!(plan.levels.len(), 2);
+        assert_ne!(plan.levels[0].sgx_layout, plan.levels[1].sgx_layout);
 
-    #[test]
-    fn iso_to_unix_known_values() {
-        // 1970-01-01T00:00:00Z → 0
-        assert_eq!(iso_to_unix("1970-01-01T00:00:00Z"), Some(0));
-        // 2024-03-13T00:00:00Z → 1710288000 (verified against `date -u -d '2024-03-13T00:00:00Z' +%s`)
-        assert_eq!(iso_to_unix("2024-03-13T00:00:00Z"), Some(1710288000));
-        // Leap year boundary: 2020-02-29T12:34:56Z
-        assert_eq!(iso_to_unix("2020-02-29T12:34:56Z"), Some(1582979696));
-    }
-
-    #[test]
-    fn extracts_sgx_components_template() {
-        let raw = SGX_V3_INNER.as_bytes();
-        let (s, e) = find_top_level_array(raw, b"tcbLevels").unwrap();
-        let items = brace_scan_items(raw, s, e);
-        let tpl = extract_components_template(raw, items[0].0 as u32, items[0].1 as u32, b"\"sgxtcbcomponents\":")
-            .expect("template should be present");
-        assert_eq!(tpl[0], b'[');
-        assert_eq!(*tpl.last().unwrap(), b']');
-        // Template must contain 16 `"svn":` occurrences.
-        let svn_count = tpl.windows(6).filter(|w| *w == b"\"svn\":").count();
-        assert_eq!(svn_count, 16);
-    }
-
-    #[test]
-    fn pack_one_layout() {
-        let p = pack_one("TDX_01");
-        assert_eq!(p[0], 6);
-        assert_eq!(&p[1..7], b"TDX_01");
-        for b in &p[7..] {
-            assert_eq!(*b, 0);
-        }
-    }
-
-    #[test]
-    fn dump_live_eval19_stream() {
-        // Reads the live Intel response captured under /tmp and dumps the constructed level
-        // stream + key offsets for comparison against the failing contract call.
-        let path = "/tmp/intel-tcb-eval19.json";
-        let raw_json = match std::fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(_) => return, // skip when the fixture isn't present locally
-        };
-        let inner = super::extract_tcb_info_str(&raw_json).unwrap();
-        let raw = inner.as_bytes();
-        let ranges = find_array_ranges(raw).unwrap();
-        eprintln!("inner len: {}", raw.len());
-        eprintln!(
-            "tcb_levels_start={}  tcb_levels_end={}",
-            ranges.tcb_levels_start, ranges.tcb_levels_end
+        let payload = build_level_batch_payload(&plan.levels, false, 3);
+        let header_len = 1 + component_layout_len(&plan.levels[0].sgx_layout);
+        let first_len = 4 + 4 + 4 + 3 + 1 + 16 + 4 + 20 + 1 + 4;
+        let second_flags_offset = header_len + first_len + 4 + 4 + 4 + 3;
+        assert_eq!(
+            payload[second_flags_offset] & LEVEL_FLAG_SGX_LAYOUT_OVERRIDE,
+            LEVEL_FLAG_SGX_LAYOUT_OVERRIDE
         );
-        eprintln!("byte at tcb_levels_start: {:?}", raw[ranges.tcb_levels_start] as char);
-        eprintln!("byte at tcb_levels_end-1: {:?}", raw[ranges.tcb_levels_end - 1] as char);
-        let levels = extract_levels(raw, ranges.tcb_levels_start, ranges.tcb_levels_end, 3).unwrap();
-        eprintln!("levels: {}", levels.len());
-        for (i, l) in levels.iter().enumerate() {
-            eprintln!(
-                "  [{}] byteStart={} byteEnd={} packedLen={} firstBytePacked=0x{:02x} rawDate={}",
-                i,
-                l.byte_start,
-                l.byte_end,
-                l.packed.len(),
-                l.packed[0],
-                std::str::from_utf8(&l.raw_tcb_date).unwrap()
-            );
-        }
-        let template = extract_components_template(raw, levels[0].byte_start, levels[0].byte_end, b"\"sgxtcbcomponents\":");
-        eprintln!(
-            "sgx template found: {}",
-            template.as_ref().map(|t| t.len()).unwrap_or(0)
+    }
+
+    #[test]
+    fn builds_tdx_plan_with_nested_advisory_presence() {
+        let plan = build_async_plan(
+            TDX_INNER.as_bytes(),
+            TcbLocator {
+                tcb_type: 1,
+                fmspc: hex::decode("10A06D070000").unwrap().try_into().unwrap(),
+                version: 3,
+            },
+        )
+        .unwrap();
+        assert!(plan.has_tdx_components);
+        assert_eq!(plan.identities.len(), 1);
+        assert_eq!(
+            plan.identities[0].nested_levels[0].flags & LEVEL_FLAG_HAS_ADVISORY_FIELD,
+            1
         );
-        let stream = build_level_stream(&levels, false);
-        eprintln!("level_stream len: {}", stream.len());
-        // Dump the first level item entirely (4-byte length prefix + packed + 4+4+20 metadata)
-        let item0_size = 4 + 78 + 4 + 4 + 20;
-        eprintln!("first item ({}B) hex: {}", item0_size, hex::encode(&stream[..item0_size]));
-        // Show just the packed bytes (skip the 4-byte length prefix)
-        eprintln!("level0 packed: {}", hex::encode(&stream[4..4 + 78]));
+        let payload = build_identity_batch_payload(&plan.identities);
+        assert!(!payload.is_empty());
+    }
+
+    fn component_layout_len(layout: &[ComponentDescriptor]) -> usize {
+        layout
+            .iter()
+            .map(|descriptor| {
+                3 + 2 + descriptor.category.len() + 2 + descriptor.component_type.len()
+            })
+            .sum()
     }
 }
