@@ -3,6 +3,7 @@ pub mod fmspc_tcb_dao;
 pub mod parse_address_from_env_var;
 pub mod pck_dao;
 pub mod pcs_dao;
+pub mod pcs_dao_v2;
 pub mod tcb_eval_dao;
 
 pub const RPC_URL: &str = "https://rpc-testnet.ata.network";

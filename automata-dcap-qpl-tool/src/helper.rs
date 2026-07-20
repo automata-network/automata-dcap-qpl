@@ -11,14 +11,17 @@ use automata_dcap_qpl_contracts::{
     fmspc_tcb_dao::{FmspcTcbDao, TcbInfoJsonObj},
     parse_address_from_env_var::parse_address_from_env_var,
     pcs_dao::PcsDao,
+    pcs_dao_v2::{PcsDaoV2, X509CrlHelperV2},
 };
 use ethers::prelude::*;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use hex::FromHex;
 use pccs_reader_rs::*;
 
+use openssl::asn1::Asn1Time;
 use openssl::x509::{X509Crl, X509};
 use reqwest;
+use std::cmp::Ordering;
 use std::ffi::{c_char, CStr, CString};
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{timeout, Duration};
@@ -28,6 +31,99 @@ pub use tcb_fmspc_async::upsert_tcb_fmspc_func;
 
 /// Timeout for waiting for transaction confirmation (2 minutes)
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// A 50-entry batch stays comfortably below the 14M operational gas safety
+/// line in the 129-entry Intel Platform CRL benchmark. Larger values are
+/// intentionally rejected until they are separately benchmarked.
+pub const DEFAULT_CRL_INDEX_BATCH_SIZE: u64 = 50;
+pub const MAX_CRL_INDEX_BATCH_SIZE: u64 = 50;
+const MAX_CRL_INDEX_TRANSACTIONS: usize = 4096;
+
+type CrlSigner = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+#[derive(Clone, Copy)]
+enum CrlIndexMode {
+    Compatible,
+    Required,
+}
+
+pub fn validate_crl_index_batch_size(batch_size: u64) -> bool {
+    (1..=MAX_CRL_INDEX_BATCH_SIZE).contains(&batch_size)
+}
+
+fn crl_is_current(crl: &X509Crl) -> bool {
+    let now = match Asn1Time::days_from_now(0) {
+        Ok(now) => now,
+        Err(_) => return false,
+    };
+    let next_update = match crl.next_update() {
+        Some(next_update) => next_update,
+        None => return false,
+    };
+
+    matches!(crl.last_update().compare(&now), Ok(Ordering::Less))
+        && matches!(next_update.compare(&now), Ok(Ordering::Greater))
+}
+
+/// Detect whether the configured PCS DAO uses the V2 CRL helper before any
+/// state-changing transaction is submitted.
+///
+/// `indexedCrls` is a public mapping getter in V2 and cannot legitimately
+/// revert. A revert therefore identifies a legacy helper. Transport and ABI
+/// decoding errors are not treated as legacy because silently doing so could
+/// hide a broken deployment or RPC endpoint.
+async fn should_index_crl<M: Middleware + 'static>(
+    pcs_dao: &PcsDao<M>,
+    mode: CrlIndexMode,
+    log_prefix: &str,
+) -> Option<bool> {
+    let crl_helper_address = match pcs_dao.crl_lib().call().await {
+        Ok(address) => address,
+        Err(err) => {
+            log::error!("{} unable to resolve CRL helper: {:?}", log_prefix, err);
+            return None;
+        }
+    };
+    let crl_helper = X509CrlHelperV2::new(crl_helper_address, pcs_dao.client());
+
+    match crl_helper.indexed_crls([0u8; 32]).call().await {
+        Ok(_) => {
+            log::info!(
+                "{} detected PCS DAO V2 CRL indexing support at {:?}",
+                log_prefix,
+                crl_helper_address
+            );
+            Some(true)
+        }
+        Err(err) if err.is_revert() => match mode {
+            CrlIndexMode::Compatible => {
+                log::info!(
+                    "{} detected legacy PCS DAO CRL helper at {:?}; upsert will run without indexing",
+                    log_prefix,
+                    crl_helper_address
+                );
+                Some(false)
+            }
+            CrlIndexMode::Required => {
+                log::error!(
+                    "{} PCS DAO V2 CRL indexing is required, but helper {:?} is legacy",
+                    log_prefix,
+                    crl_helper_address
+                );
+                None
+            }
+        },
+        Err(err) => {
+            log::error!(
+                "{} unable to probe PCS DAO V2 CRL indexing support at {:?}: {:?}",
+                log_prefix,
+                crl_helper_address,
+                err
+            );
+            None
+        }
+    }
+}
 
 /// Estimate gas against the `latest` block and return the value with a 30%
 /// buffer. The default ethers-rs `fill_transaction` flow estimates against
@@ -58,6 +154,214 @@ where
             None
         }
     }
+}
+
+/// Returns the DER that should be indexed when the fetched CRL is already
+/// represented by the stored collateral. Exact DER equality covers normal
+/// retries. TBS equality additionally covers a signature-only reissue, which
+/// the DAO correctly treats as a duplicate because the signed content did not
+/// change; in that case the index must use the DER actually stored on-chain.
+async fn reusable_stored_crl<M>(
+    pcs_dao: &PcsDao<M>,
+    ca: u8,
+    fetched_crl: &Bytes,
+    log_prefix: &str,
+) -> Option<Bytes>
+where
+    M: Middleware + 'static,
+{
+    let stored_crl = match pcs_dao
+        .get_certificate_by_id(ca)
+        .from(Address::zero())
+        .call()
+        .await
+    {
+        Ok((_, stored_crl)) if !stored_crl.is_empty() => stored_crl,
+        Ok(_) => return None,
+        Err(err) => {
+            log::debug!(
+                "{} unable to compare stored CRL before upsert: {:?}",
+                log_prefix,
+                err
+            );
+            return None;
+        }
+    };
+    if stored_crl == *fetched_crl {
+        return Some(stored_crl);
+    }
+
+    let crl_helper_address = pcs_dao.crl_lib().call().await.ok()?;
+    let crl_helper = X509CrlHelperV2::new(crl_helper_address, pcs_dao.client());
+    let (fetched_tbs, _) = crl_helper
+        .get_tbs_and_sig(fetched_crl.clone())
+        .call()
+        .await
+        .ok()?;
+    let key = pcs_dao.pcs_key(ca, true).call().await.ok()?;
+    let stored_tbs_hash = pcs_dao
+        .get_collateral_hash(key)
+        .from(Address::zero())
+        .call()
+        .await
+        .ok()?;
+    if ethers::utils::keccak256(fetched_tbs.as_ref()) == stored_tbs_hash {
+        log::info!(
+            "{} fetched CRL only changes the outer signature; retaining and indexing stored DER",
+            log_prefix
+        );
+        return Some(stored_crl);
+    }
+
+    None
+}
+
+/// Completes the V2 index for the exact DER stored by the preceding upsert.
+///
+/// The PCS DAO owns the sequential cursor, so a caller can safely retry this
+/// function after a timeout or restart. `expected_der_hash` also prevents an
+/// old worker from indexing a CRL after a newer CRL has become current.
+pub async fn index_stored_crl_batches(
+    signer: Arc<CrlSigner>,
+    pcs_dao_contract_addr: &str,
+    chain_id: u64,
+    ca: u8,
+    crl: &Bytes,
+    gas_price: U256,
+    batch_size: u64,
+) -> bool {
+    let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
+    if !validate_crl_index_batch_size(batch_size) {
+        log::error!(
+            "{} invalid CRL index batch size {}; expected 1..={}",
+            log_prefix,
+            batch_size,
+            MAX_CRL_INDEX_BATCH_SIZE
+        );
+        return false;
+    }
+
+    let pcs_dao_address = parse_address_from_str(pcs_dao_contract_addr);
+    let pcs_dao = PcsDao::new(pcs_dao_address, signer.clone());
+    let pcs_dao_v2 = PcsDaoV2::new(pcs_dao_address, signer.clone());
+    let crl_helper_address = match pcs_dao.crl_lib().call().await {
+        Ok(address) => address,
+        Err(err) => {
+            log::error!("{} unable to resolve CRL helper: {:?}", log_prefix, err);
+            return false;
+        }
+    };
+    let crl_helper = X509CrlHelperV2::new(crl_helper_address, signer.clone());
+    let der_hash = ethers::utils::keccak256(crl.as_ref());
+
+    for batch_number in 1..=MAX_CRL_INDEX_TRANSACTIONS {
+        match crl_helper.indexed_crls(der_hash).call().await {
+            Ok(true) => {
+                log::info!(
+                    "{} CRL index is complete: ca={}, der_hash=0x{}",
+                    log_prefix,
+                    ca,
+                    hex::encode(der_hash)
+                );
+                return true;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                log::error!(
+                    "{} unable to read V2 CRL index state: {:?}",
+                    log_prefix,
+                    err
+                );
+                return false;
+            }
+        }
+
+        let call = pcs_dao_v2
+            .index_stored_crl_batch(ca, der_hash, U256::from(batch_size))
+            .gas_price(gas_price);
+        let (indexed_count, will_complete) = match call.call().await {
+            Ok(result) => result,
+            Err(err) => {
+                log::error!(
+                    "{} txn[index_stored_crl_batch] preflight failed: {:?}",
+                    log_prefix,
+                    err
+                );
+                return false;
+            }
+        };
+        let gas_with_buf = match estimate_gas_at_latest(
+            signer.as_ref(),
+            &call.tx,
+            &log_prefix,
+            "index_stored_crl_batch",
+        )
+        .await
+        {
+            Some(gas) => gas,
+            None => return false,
+        };
+        let call = call.gas(gas_with_buf);
+        let pending_tx = match call.send().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                log::error!(
+                    "{} txn[index_stored_crl_batch] send failed: {:?}",
+                    log_prefix,
+                    err
+                );
+                return false;
+            }
+        };
+        log::info!(
+            "{} txn[index_stored_crl_batch] batch={}, indexed_count={}, will_complete={}, hash={:?}",
+            log_prefix,
+            batch_number,
+            indexed_count,
+            will_complete,
+            pending_tx.tx_hash()
+        );
+        match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+            Ok(Ok(Some(receipt))) if receipt.status == Some(U64::from(1)) => {
+                log::info!(
+                    "{} txn[index_stored_crl_batch] receipt: {:?}",
+                    log_prefix,
+                    receipt
+                );
+            }
+            Ok(Ok(receipt)) => {
+                log::error!(
+                    "{} txn[index_stored_crl_batch] missing or failed receipt: {:?}",
+                    log_prefix,
+                    receipt
+                );
+                return false;
+            }
+            Ok(Err(err)) => {
+                log::error!(
+                    "{} txn[index_stored_crl_batch] receipt error: {:?}",
+                    log_prefix,
+                    err
+                );
+                return false;
+            }
+            Err(_) => {
+                log::error!(
+                    "{} txn[index_stored_crl_batch] confirmation timeout after {:?}",
+                    log_prefix,
+                    TX_CONFIRMATION_TIMEOUT
+                );
+                return false;
+            }
+        }
+    }
+
+    log::error!(
+        "{} CRL indexing exceeded {} transactions",
+        log_prefix,
+        MAX_CRL_INDEX_TRANSACTIONS
+    );
+    false
 }
 
 const INTEL_PCS_SUBSCRIPTION_KEY_ENV: &str = "INTEL_PCS_SUBSCRIPTION_KEY";
@@ -1485,7 +1789,81 @@ pub async fn upsert_root_ca_crl_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    upsert_root_ca_crl_compatible_func(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        DEFAULT_CRL_INDEX_BATCH_SIZE,
+    )
+    .await
+}
+
+/// Upsert a ROOT CRL on both legacy and V2 PCS DAO deployments. V2 is
+/// automatically indexed; legacy deployments preserve the original upsert
+/// behavior.
+pub async fn upsert_root_ca_crl_compatible_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+) -> bool {
+    upsert_root_ca_crl_internal(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        index_batch_size,
+        CrlIndexMode::Compatible,
+    )
+    .await
+}
+
+/// Strict V2 entry point for deployment validation. This returns false before
+/// submitting the upsert if the configured PCS DAO does not support indexing.
+pub async fn upsert_root_ca_crl_with_index_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+) -> bool {
+    upsert_root_ca_crl_internal(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        index_batch_size,
+        CrlIndexMode::Required,
+    )
+    .await
+}
+
+async fn upsert_root_ca_crl_internal(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+    index_mode: CrlIndexMode,
+) -> bool {
     let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
+    if !validate_crl_index_batch_size(index_batch_size) {
+        log::error!(
+            "{} invalid CRL index batch size {}; expected 1..={}",
+            log_prefix,
+            index_batch_size,
+            MAX_CRL_INDEX_BATCH_SIZE
+        );
+        return false;
+    }
     let req_url = format!("https://certificates.trustedservices.intel.com/IntelSGXRootCA.crl",);
     let response = match reqwest::get(req_url.clone()).await {
         Ok(v) => v,
@@ -1518,50 +1896,95 @@ pub async fn upsert_root_ca_crl_func(
         parse_address_from_str(pcs_dao_contract_addr),
         signer.clone(),
     );
-    // PCK CRL
+    let should_index = match should_index_crl(&pcs_dao, index_mode, &log_prefix).await {
+        Some(value) => value,
+        None => return false,
+    };
     let root_ca_crl = match X509Crl::from_pem(root_ca_crl.as_bytes()) {
-        Ok(c) => hex::encode(c.to_der().unwrap()),
+        Ok(c) => {
+            if !crl_is_current(&c) {
+                log::error!("{} Intel ROOT CA CRL is not currently valid", log_prefix);
+                return false;
+            }
+            Bytes::from(c.to_der().unwrap())
+        }
         Err(err) => {
             log::error!("Error parsing certificate: {:?}", err);
             return false;
         }
     };
-    let call = pcs_dao
-        .upsert_root_ca_crl(Bytes::from_str(&root_ca_crl).unwrap())
-        .gas_price(gas_price);
-    let gas_with_buf = match estimate_gas_at_latest(
-        signer.as_ref(),
-        &call.tx,
-        &log_prefix,
-        "upsert_root_ca_crl",
-    )
-    .await
+    let crl_to_index = if let Some(stored_crl) =
+        reusable_stored_crl(&pcs_dao, CAID::Root as u8, &root_ca_crl, &log_prefix).await
     {
-        Some(g) => g,
-        None => return false,
-    };
-    match call.gas(gas_with_buf).send().await {
-        Ok(pending_tx) => {
-            log::info!("{} txn[upsert_root_ca_crl] hash: {:?}", log_prefix, pending_tx.tx_hash());
-            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
-                Ok(Ok(receipt)) => {
-                    log::info!("{} txn[upsert_root_ca_crl] receipt: {:?}", log_prefix, receipt);
-                    return true;
-                }
-                Ok(Err(err)) => {
-                    log::error!("{} txn[upsert_root_ca_crl] receipt meet error: {:?}", log_prefix, err);
-                    return false;
-                }
-                Err(_) => {
-                    log::error!("{} txn[upsert_root_ca_crl] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
-                    return false;
-                }
+        if should_index {
+            log::info!(
+                "{} ROOT CA CRL is already current; resuming V2 indexing",
+                log_prefix
+            );
+        } else {
+            log::info!(
+                "{} ROOT CA CRL is already current; no legacy upsert is needed",
+                log_prefix
+            );
+        }
+        stored_crl
+    } else {
+        let call = pcs_dao
+            .upsert_root_ca_crl(root_ca_crl.clone())
+            .gas_price(gas_price);
+        let gas_with_buf = match estimate_gas_at_latest(
+            signer.as_ref(),
+            &call.tx,
+            &log_prefix,
+            "upsert_root_ca_crl",
+        )
+        .await
+        {
+            Some(g) => g,
+            None => return false,
+        };
+        let call = call.gas(gas_with_buf);
+        let pending_tx = match call.send().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                log::error!("{} txn[upsert_root_ca_crl] send failed: {:?}", log_prefix, err);
+                return false;
+            }
+        };
+        log::info!("{} txn[upsert_root_ca_crl] hash: {:?}", log_prefix, pending_tx.tx_hash());
+        match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+            Ok(Ok(Some(receipt))) if receipt.status == Some(U64::from(1)) => {
+                log::info!("{} txn[upsert_root_ca_crl] receipt: {:?}", log_prefix, receipt);
+            }
+            Ok(Ok(receipt)) => {
+                log::error!("{} txn[upsert_root_ca_crl] missing or failed receipt: {:?}", log_prefix, receipt);
+                return false;
+            }
+            Ok(Err(err)) => {
+                log::error!("{} txn[upsert_root_ca_crl] receipt error: {:?}", log_prefix, err);
+                return false;
+            }
+            Err(_) => {
+                log::error!("{} txn[upsert_root_ca_crl] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
+                return false;
             }
         }
-        Err(err) => {
-            log::error!("{} txn[upsert_root_ca_crl] meet error: {:?}", log_prefix, err);
-            return false;
-        }
+        root_ca_crl
+    };
+
+    if should_index {
+        index_stored_crl_batches(
+            signer,
+            pcs_dao_contract_addr,
+            chain_id,
+            CAID::Root as u8,
+            &crl_to_index,
+            gas_price,
+            index_batch_size,
+        )
+        .await
+    } else {
+        true
     }
 }
 
@@ -1702,6 +2125,25 @@ pub async fn upsert_platform_ca_crl_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    upsert_platform_ca_crl_compatible_func(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        DEFAULT_CRL_INDEX_BATCH_SIZE,
+    )
+    .await
+}
+
+pub async fn upsert_platform_ca_crl_compatible_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+) -> bool {
     upsert_platform_processor_ca_crl(
         private_key,
         rpc_url,
@@ -1709,6 +2151,29 @@ pub async fn upsert_platform_ca_crl_func(
         gas_price,
         pcs_dao_contract_addr,
         "platform",
+        index_batch_size,
+        CrlIndexMode::Compatible,
+    )
+    .await
+}
+
+pub async fn upsert_platform_ca_crl_with_index_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+) -> bool {
+    upsert_platform_processor_ca_crl(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        "platform",
+        index_batch_size,
+        CrlIndexMode::Required,
     )
     .await
 }
@@ -1850,6 +2315,25 @@ pub async fn upsert_processor_ca_crl_func(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
 ) -> bool {
+    upsert_processor_ca_crl_compatible_func(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        DEFAULT_CRL_INDEX_BATCH_SIZE,
+    )
+    .await
+}
+
+pub async fn upsert_processor_ca_crl_compatible_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+) -> bool {
     upsert_platform_processor_ca_crl(
         private_key,
         rpc_url,
@@ -1857,6 +2341,29 @@ pub async fn upsert_processor_ca_crl_func(
         gas_price,
         pcs_dao_contract_addr,
         "processor",
+        index_batch_size,
+        CrlIndexMode::Compatible,
+    )
+    .await
+}
+
+pub async fn upsert_processor_ca_crl_with_index_func(
+    private_key: String,
+    rpc_url: String,
+    chain_id: u64,
+    gas_price: U256,
+    pcs_dao_contract_addr: &str,
+    index_batch_size: u64,
+) -> bool {
+    upsert_platform_processor_ca_crl(
+        private_key,
+        rpc_url,
+        chain_id,
+        gas_price,
+        pcs_dao_contract_addr,
+        "processor",
+        index_batch_size,
+        CrlIndexMode::Required,
     )
     .await
 }
@@ -2129,8 +2636,19 @@ async fn upsert_platform_processor_ca_crl(
     gas_price: U256,
     pcs_dao_contract_addr: &str,
     ca_type: &str, // "platform" or "processor"
+    index_batch_size: u64,
+    index_mode: CrlIndexMode,
 ) -> bool {
     let log_prefix = format!("[{}][{}]", chain_id, pcs_dao_contract_addr);
+    if !validate_crl_index_batch_size(index_batch_size) {
+        log::error!(
+            "{} invalid CRL index batch size {}; expected 1..={}",
+            log_prefix,
+            index_batch_size,
+            MAX_CRL_INDEX_BATCH_SIZE
+        );
+        return false;
+    }
     let req_url = format!(
         "https://api.trustedservices.intel.com/sgx/certification/v4/pckcrl?ca={}",
         ca_type,
@@ -2170,9 +2688,18 @@ async fn upsert_platform_processor_ca_crl(
         parse_address_from_str(pcs_dao_contract_addr),
         signer.clone(),
     );
-    // PCK CRL
+    let should_index = match should_index_crl(&pcs_dao, index_mode, &log_prefix).await {
+        Some(value) => value,
+        None => return false,
+    };
     let pck_crl = match X509Crl::from_pem(pck_crl.as_bytes()) {
-        Ok(c) => hex::encode(c.to_der().unwrap()),
+        Ok(c) => {
+            if !crl_is_current(&c) {
+                log::error!("{} Intel PCK CRL is not currently valid", log_prefix);
+                return false;
+            }
+            Bytes::from(c.to_der().unwrap())
+        }
         Err(err) => {
             log::error!("Error parsing certificate: {:?}", err);
             return false;
@@ -2186,41 +2713,297 @@ async fn upsert_platform_processor_ca_crl(
         log::error!("Invalid CA type: {}", ca_type);
         return false;
     };
-    let call = pcs_dao
-        .upsert_pck_crl(ca, Bytes::from_str(&pck_crl).unwrap())
-        .gas_price(gas_price);
-    let gas_with_buf = match estimate_gas_at_latest(
-        signer.as_ref(),
-        &call.tx,
-        &log_prefix,
-        "upsert_pck_crl",
-    )
-    .await
+    let crl_to_index = if let Some(stored_crl) =
+        reusable_stored_crl(&pcs_dao, ca, &pck_crl, &log_prefix).await
     {
-        Some(g) => g,
-        None => return false,
-    };
-    match call.gas(gas_with_buf).send().await {
-        Ok(pending_tx) => {
-            log::info!("{} txn[upsert_pck_crl] hash: {:?}", log_prefix, pending_tx.tx_hash());
-            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
-                Ok(Ok(receipt)) => {
-                    log::info!("{} txn[upsert_pck_crl] receipt: {:?}", log_prefix, receipt);
-                    return true;
-                }
-                Ok(Err(err)) => {
-                    log::error!("{} txn[upsert_pck_crl] receipt meet error: {:?}", log_prefix, err);
-                    return false;
-                }
-                Err(_) => {
-                    log::error!("{} txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
-                    return false;
-                }
+        if should_index {
+            log::info!(
+                "{} PCK {} CA CRL is already current; resuming V2 indexing",
+                log_prefix,
+                ca_type
+            );
+        } else {
+            log::info!(
+                "{} PCK {} CA CRL is already current; no legacy upsert is needed",
+                log_prefix,
+                ca_type
+            );
+        }
+        stored_crl
+    } else {
+        let call = pcs_dao
+            .upsert_pck_crl(ca, pck_crl.clone())
+            .gas_price(gas_price);
+        let gas_with_buf = match estimate_gas_at_latest(
+            signer.as_ref(),
+            &call.tx,
+            &log_prefix,
+            "upsert_pck_crl",
+        )
+        .await
+        {
+            Some(g) => g,
+            None => return false,
+        };
+        let call = call.gas(gas_with_buf);
+        let pending_tx = match call.send().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                log::error!("{} txn[upsert_pck_crl] send failed: {:?}", log_prefix, err);
+                return false;
+            }
+        };
+        log::info!("{} txn[upsert_pck_crl] hash: {:?}", log_prefix, pending_tx.tx_hash());
+        match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+            Ok(Ok(Some(receipt))) if receipt.status == Some(U64::from(1)) => {
+                log::info!("{} txn[upsert_pck_crl] receipt: {:?}", log_prefix, receipt);
+            }
+            Ok(Ok(receipt)) => {
+                log::error!("{} txn[upsert_pck_crl] missing or failed receipt: {:?}", log_prefix, receipt);
+                return false;
+            }
+            Ok(Err(err)) => {
+                log::error!("{} txn[upsert_pck_crl] receipt error: {:?}", log_prefix, err);
+                return false;
+            }
+            Err(_) => {
+                log::error!("{} txn[upsert_pck_crl] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
+                return false;
             }
         }
-        Err(err) => {
-            log::error!("{} txn[upsert_pck_crl] meet error: {:?}", log_prefix, err);
-            return false;
-        }
+        pck_crl
+    };
+
+    if should_index {
+        index_stored_crl_batches(
+            signer,
+            pcs_dao_contract_addr,
+            chain_id,
+            ca,
+            &crl_to_index,
+            gas_price,
+            index_batch_size,
+        )
+        .await
+    } else {
+        true
+    }
+}
+
+#[cfg(test)]
+mod crl_v2_tests {
+    use super::*;
+    use ethers::abi::{encode, Token};
+    use ethers::providers::{JsonRpcError, MockProvider, MockResponse};
+
+    fn signed_mock_pcs_dao() -> (
+        PcsDao<SignerMiddleware<Provider<MockProvider>, LocalWallet>>,
+        MockProvider,
+        Address,
+    ) {
+        let (provider, mock) = Provider::mocked();
+        let wallet = LocalWallet::from_bytes(&[1u8; 32]).unwrap();
+        let signer_address = wallet.address();
+        let signer = Arc::new(SignerMiddleware::new(provider, wallet));
+        (
+            PcsDao::new(Address::from_low_u64_be(1), signer),
+            mock,
+            signer_address,
+        )
+    }
+
+    fn eth_call_params(tx: &TypedTransaction) -> [serde_json::Value; 2] {
+        [
+            serde_json::to_value(tx).unwrap(),
+            serde_json::to_value(BlockId::Number(BlockNumber::Latest)).unwrap(),
+        ]
+    }
+
+    fn mock_pcs_dao(
+        helper_response: MockResponse,
+    ) -> (PcsDao<Provider<MockProvider>>, MockProvider) {
+        let (provider, mock) = Provider::mocked();
+        let helper = Address::from_low_u64_be(2);
+
+        // MockProvider consumes responses from the back: crlLib() is called
+        // first, followed by indexedCrls(bytes32).
+        mock.push_response(helper_response);
+        mock.push::<Bytes, _>(Bytes::from(encode(&[Token::Address(helper)])))
+            .unwrap();
+
+        (
+            PcsDao::new(Address::from_low_u64_be(1), Arc::new(provider)),
+            mock,
+        )
+    }
+
+    #[test]
+    fn crl_index_batch_size_is_bounded_by_benchmarked_limit() {
+        assert!(!validate_crl_index_batch_size(0));
+        assert!(validate_crl_index_batch_size(1));
+        assert!(validate_crl_index_batch_size(DEFAULT_CRL_INDEX_BATCH_SIZE));
+        assert!(!validate_crl_index_batch_size(MAX_CRL_INDEX_BATCH_SIZE + 1));
+    }
+
+    #[test]
+    fn v2_crl_selectors_match_solidity_interfaces() {
+        assert_eq!(
+            &ethers::utils::id("indexStoredCrlBatch(uint8,bytes32,uint256)")[..4],
+            &[0x0d, 0xc5, 0x7f, 0xbd]
+        );
+        assert_eq!(
+            &ethers::utils::id("indexedCrls(bytes32)")[..4],
+            &[0x22, 0xb8, 0xcf, 0x17]
+        );
+        assert_eq!(
+            &ethers::utils::id("getTbsAndSig(bytes)")[..4],
+            &[0xfc, 0xf0, 0xbe, 0x24]
+        );
+    }
+
+    #[tokio::test]
+    async fn compatible_probe_enables_v2_indexing() {
+        let response = MockResponse::Value(
+            serde_json::to_value(Bytes::from(encode(&[Token::Bool(false)]))).unwrap(),
+        );
+        let (pcs_dao, _) = mock_pcs_dao(response);
+
+        assert_eq!(
+            should_index_crl(&pcs_dao, CrlIndexMode::Compatible, "[test]").await,
+            Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn compatible_probe_accepts_legacy_revert_without_indexing() {
+        let response = MockResponse::Error(JsonRpcError {
+            code: 3,
+            message: "execution reverted".to_string(),
+            data: Some(serde_json::Value::String("0x".to_string())),
+        });
+        let (pcs_dao, _) = mock_pcs_dao(response);
+
+        assert_eq!(
+            should_index_crl(&pcs_dao, CrlIndexMode::Compatible, "[test]").await,
+            Some(false)
+        );
+    }
+
+    #[tokio::test]
+    async fn strict_probe_rejects_legacy_before_upsert() {
+        let response = MockResponse::Error(JsonRpcError {
+            code: 3,
+            message: "execution reverted".to_string(),
+            data: Some(serde_json::Value::String("0x".to_string())),
+        });
+        let (pcs_dao, _) = mock_pcs_dao(response);
+
+        assert_eq!(
+            should_index_crl(&pcs_dao, CrlIndexMode::Required, "[test]").await,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn compatible_probe_does_not_downgrade_transport_failure() {
+        let (provider, _) = Provider::mocked();
+        let pcs_dao = PcsDao::new(Address::from_low_u64_be(1), Arc::new(provider));
+
+        assert_eq!(
+            should_index_crl(&pcs_dao, CrlIndexMode::Compatible, "[test]").await,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn reusable_exact_crl_reads_as_authorized_zero_address() {
+        let (pcs_dao, mock, _) = signed_mock_pcs_dao();
+        let ca = CAID::Platform as u8;
+        let stored_crl = Bytes::from_static(b"stored-crl");
+
+        mock.push::<Bytes, _>(Bytes::from(encode(&[
+            Token::Bytes(Vec::new()),
+            Token::Bytes(stored_crl.to_vec()),
+        ])))
+        .unwrap();
+
+        assert_eq!(
+            reusable_stored_crl(&pcs_dao, ca, &stored_crl, "[test]").await,
+            Some(stored_crl)
+        );
+
+        let expected = pcs_dao
+            .get_certificate_by_id(ca)
+            .from(Address::zero());
+        mock.assert_request("eth_call", eth_call_params(&expected.tx))
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn reusable_signature_only_reissue_uses_zero_address_for_protected_reads() {
+        let (pcs_dao, mock, signer_address) = signed_mock_pcs_dao();
+        let ca = CAID::Platform as u8;
+        let stored_crl = Bytes::from_static(b"stored-crl");
+        let fetched_crl = Bytes::from_static(b"signature-only-reissue");
+        let helper_address = Address::from_low_u64_be(2);
+        let fetched_tbs = b"identical-tbs".to_vec();
+        let key = [0x11; 32];
+        let stored_tbs_hash = ethers::utils::keccak256(&fetched_tbs);
+
+        // MockProvider pops responses from the back, so enqueue them in reverse
+        // request order.
+        mock.push::<Bytes, _>(Bytes::from(encode(&[Token::FixedBytes(
+            stored_tbs_hash.to_vec(),
+        )])))
+        .unwrap();
+        mock.push::<Bytes, _>(Bytes::from(encode(&[Token::FixedBytes(key.to_vec())])))
+            .unwrap();
+        mock.push::<Bytes, _>(Bytes::from(encode(&[
+            Token::Bytes(fetched_tbs.clone()),
+            Token::Bytes(vec![0x22; 64]),
+        ])))
+        .unwrap();
+        mock.push::<Bytes, _>(Bytes::from(encode(&[Token::Address(helper_address)])))
+            .unwrap();
+        mock.push::<Bytes, _>(Bytes::from(encode(&[
+            Token::Bytes(Vec::new()),
+            Token::Bytes(stored_crl.to_vec()),
+        ])))
+        .unwrap();
+
+        assert_eq!(
+            reusable_stored_crl(&pcs_dao, ca, &fetched_crl, "[test]").await,
+            Some(stored_crl)
+        );
+
+        let expected_certificate_read = pcs_dao
+            .get_certificate_by_id(ca)
+            .from(Address::zero());
+        mock.assert_request(
+            "eth_call",
+            eth_call_params(&expected_certificate_read.tx),
+        )
+        .unwrap();
+
+        let expected_helper_read = pcs_dao.crl_lib().from(signer_address);
+        mock.assert_request("eth_call", eth_call_params(&expected_helper_read.tx))
+            .unwrap();
+
+        let crl_helper = X509CrlHelperV2::new(helper_address, pcs_dao.client());
+        let expected_tbs_read = crl_helper
+            .get_tbs_and_sig(fetched_crl)
+            .from(signer_address);
+        mock.assert_request("eth_call", eth_call_params(&expected_tbs_read.tx))
+            .unwrap();
+
+        let expected_key_read = pcs_dao.pcs_key(ca, true).from(signer_address);
+        mock.assert_request("eth_call", eth_call_params(&expected_key_read.tx))
+            .unwrap();
+
+        let expected_hash_read = pcs_dao
+            .get_collateral_hash(key)
+            .from(Address::zero());
+        mock.assert_request("eth_call", eth_call_params(&expected_hash_read.tx))
+            .unwrap();
     }
 }
