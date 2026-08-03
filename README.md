@@ -24,18 +24,37 @@ Within this repository, two key components are featured:
 Take [Automata SGX Scaffold](https://github.com/automata-network/sgx-scaffold) repo as the example to demonstrate how to use this lib and tool.
 
 ### **Automata DCAP QPL LIB**
-1. Build the lib with the following commands, you can find the lib at `automata-dcap-qpl/automata-dcap-qpl-lib/target/release` path.
+1. Clone with submodules, then choose either the repository-local implementation or the maintained
+upstream implementation. Each command uses its own locked dependency graph and writes the library
+to a separate target directory.
 ```
-$ git clone git@github.com:automata-network/automata-dcap-qpl.git
-$ cd automata-dcap-qpl-lib
-$ cargo build --release
+$ git clone --recurse-submodules git@github.com:automata-network/automata-dcap-qpl.git
+$ cd automata-dcap-qpl
+
+# Option A: build this repository's local implementation
+$ cargo build --release --locked \
+    --manifest-path automata-dcap-qpl-lib/Cargo.toml \
+    --target-dir target/local-qpl
+
+# Option B: build the maintained automata-dcap-attestation implementation
+$ cargo build --release --locked \
+    --manifest-path automata-dcap-qpl-tool/pccs-reader-rs/rust-crates/Cargo.toml \
+    --target-dir target/upstream-qpl \
+    -p automata-dcap-qpl
 ```
+
+The submodule tracks the maintained DCAP implementation in
+[`automata-dcap-attestation`](https://github.com/automata-network/automata-dcap-attestation/tree/main/rust-crates/libraries).
+The upstream option builds it directly without a patched or adapted source copy. The local option
+continues to use `automata-dcap-qpl-lib/`, `common/`, `contracts/`, and the independently maintained
+`automata-dcap-qpl-lib/Cargo.lock`.
 
 2. Move the lib to override the default platform quote provider library, please make sure you already follow the Automata SGX Scaffold tutorial to setup the environment.
 ```
 $ for f in /usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so*; do sudo mv "$f" "$f.bak"; done
-$ cd automata-dcap-qpl/automata-dcap-qpl-lib/target/release
-$ sudo cp libautomata_dcap_qpl.so /usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so
+$ sudo cp target/local-qpl/release/libautomata_dcap_qpl.so /usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so
+# Or, when Option B was built:
+$ sudo cp target/upstream-qpl/release/libautomata_dcap_qpl.so /usr/lib/x86_64-linux-gnu/libdcap_quoteprov.so
 ```
 
 3. Build and run the SGX Scaffold, find more details at [Automata SGX Scaffold](https://github.com/automata-network/sgx-scaffold) repo.
@@ -57,13 +76,20 @@ $ cargo sgx run
 
 Build the tool and upload the necessary collaterals on chain to satisfy the quote generation and verification requirements, you need to prepare a wallet with enough balance in Automata Testnet for the transactions.
 
+The tool is a compatibility wrapper around the maintained QPL implementation. Its existing flat
+flags (`--quote_hex`, `--quote_file`, `--function`, `--private_key`, and the remaining advanced
+arguments) are preserved. Its Cargo dependencies point directly at the pinned
+`automata-dcap-attestation` revision, so future upstream dependency fixes only require updating
+that revision, the matching library submodule revision, and the lock file.
+
 Use `./automata-dcap-qpl-tool -h` to see the details, or edit the [code](./automata-dcap-qpl-tool/src/main.rs) to set the necessary inputs.
 
 Example:
 Use the quote to check whether there is any missing collateral on-chain, and the tool will help you to fetch and upsert it before you perform the on-chain verification.
 ```
-cd automata-dcap-qpl-tool
-source env/automata_testnet
+cd automata-dcap-qpl
+source automata-dcap-qpl-tool/env/automata_testnet
+cargo build --release -p automata-dcap-qpl-tool
 ./target/release/automata-dcap-qpl-tool --quote_hex <quote hex string> -p <wallet_private_key> --chain_id=$CHAIN_ID --rpc_url=$RPC_URL
 ```
 See C.1. section in [Intel SGX ECDSA Quote Lib Reference DCAP API](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/Intel_SGX_ECDSA_QuoteLibReference_DCAP_API.pdf).
@@ -91,7 +117,7 @@ Find latest PCCS contracts in [Automata On Chain PCCS](https://github.com/automa
 
 * [Automata On Chain PCCS](https://github.com/automata-network/automata-on-chain-pccs)
 * [Automata DCAP Attestation](https://github.com/automata-network/automata-dcap-attestation)
-* [Automata On-chain PCCS Reader](https://github.com/automata-network/pccs-reader-rs)
+* [Automata On-chain PCCS Reader](https://github.com/automata-network/automata-dcap-attestation/tree/main/rust-crates/libraries/pccs-reader)
 * [SGX DCAP Caching Service Design Guide](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/SGX_DCAP_Caching_Service_Design_Guide.pdf)
 * [Intel SGX ECDSA Quote Lib Reference DCAP API](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/Intel_SGX_ECDSA_QuoteLibReference_DCAP_API.pdf)
 * [DCAP ECDSA Orientation](https://download.01.org/intel-sgx/sgx-dcap/1.20/linux/docs/DCAP_ECDSA_Orientation.pdf)

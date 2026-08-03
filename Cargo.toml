@@ -1,12 +1,13 @@
 [workspace]
 members = [
-    "common",
-    "contracts"
+    "automata-dcap-qpl-tool",
 ]
 
 exclude = [
     "automata-dcap-qpl-lib",
-    "automata-dcap-qpl-tool"
+    "automata-dcap-qpl-tool/pccs-reader-rs",
+    "common",
+    "contracts",
 ]
 
 resolver = "2"

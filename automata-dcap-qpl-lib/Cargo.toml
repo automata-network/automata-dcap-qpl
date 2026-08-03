@@ -12,7 +12,10 @@ crate-type = ["cdylib"]
 automata-dcap-qpl-common = { path = "../common" }
 automata-dcap-qpl-contracts = { path = "../contracts" }
 
-ethers = "2.0"
+# The local implementation only uses HTTP providers.  Avoid Ethers' default
+# rustls feature so this build does not retain its obsolete rustls-webpki tree;
+# OpenSSL is already required below for collateral/certificate handling.
+ethers = { version = "2.0", default-features = false, features = ["openssl"] }
 hex = "0.4"
 libloading = "0.8"
 tokio = { version = "1", features = ["full"] }
