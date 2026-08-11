@@ -32,6 +32,114 @@ pub use tcb_fmspc_async::upsert_tcb_fmspc_func;
 /// Timeout for waiting for transaction confirmation (2 minutes)
 const TX_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(120);
 
+fn append_query_parameter(url: &str, key: &str, value: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(url)
+        .map_err(|err| format!("invalid Intel PCS URL {}: {:?}", url, err))?;
+    url.query_pairs_mut().append_pair(key, value);
+    Ok(url.into())
+}
+
+async fn fetch_intel_pcs_body(url: &str) -> Result<String, String> {
+    let response = reqwest::get(url)
+        .await
+        .map_err(|err| format!("unable to get {}: {:?}", url, err))?;
+    if !response.status().is_success() {
+        return Err(format!("{} returned {}", url, response.status()));
+    }
+    response
+        .text()
+        .await
+        .map_err(|err| format!("unable to read body of {}: {:?}", url, err))
+}
+
+fn validate_collateral_tcb_eval_number(
+    body: &str,
+    collateral_field: &str,
+    expected: u32,
+) -> Result<(), String> {
+    let payload: serde_json::Value = serde_json::from_str(body)
+        .map_err(|err| format!("invalid Intel PCS collateral payload: {:?}", err))?;
+    let actual = payload
+        .get(collateral_field)
+        .and_then(|collateral| collateral.get("tcbEvaluationDataNumber"))
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| {
+            format!(
+                "{}.tcbEvaluationDataNumber is missing or invalid",
+                collateral_field
+            )
+        })?;
+    if actual != expected {
+        return Err(format!(
+            "{}.tcbEvaluationDataNumber mismatch: expected {}, got {}",
+            collateral_field, expected, actual
+        ));
+    }
+    Ok(())
+}
+
+/// Fetches Intel PCS collateral for an exact TCB evaluation data number.
+///
+/// Intel PCS has known FMSPCs for which the exact-version URL returns 404 while
+/// the unqualified standard URL returns valid collateral. In that case the
+/// standard response is accepted only when its embedded evaluation number
+/// exactly matches the requested value.
+pub(crate) async fn fetch_intel_collateral_with_eval_fallback(
+    base_url: &str,
+    collateral_update_type: Option<&str>,
+    tcb_evaluation_data_number: Option<u32>,
+    collateral_field: &str,
+    log_prefix: &str,
+) -> Result<String, String> {
+    if let Some(expected) = tcb_evaluation_data_number.filter(|value| *value > 0) {
+        let exact_url =
+            append_query_parameter(base_url, "tcbEvaluationDataNumber", &expected.to_string())?;
+        match fetch_intel_pcs_body(&exact_url).await.and_then(|body| {
+            validate_collateral_tcb_eval_number(&body, collateral_field, expected)?;
+            Ok(body)
+        }) {
+            Ok(body) => return Ok(body),
+            Err(exact_error) => {
+                log::warn!(
+                    "{} exact Intel PCS request failed; trying unqualified standard collateral: {}",
+                    log_prefix,
+                    exact_error
+                );
+            }
+        }
+
+        let standard_body = fetch_intel_pcs_body(base_url)
+            .await
+            .map_err(|standard_error| {
+                format!(
+                    "exact-version request failed and standard fallback failed: {}",
+                    standard_error
+                )
+            })?;
+        validate_collateral_tcb_eval_number(&standard_body, collateral_field, expected).map_err(
+            |mismatch| {
+                format!(
+                    "standard fallback cannot satisfy requested TCB evaluation data number {}: {}",
+                    expected, mismatch
+                )
+            },
+        )?;
+        log::warn!(
+            "{} using verified Intel PCS standard fallback for TCB evaluation data number {}",
+            log_prefix,
+            expected
+        );
+        return Ok(standard_body);
+    }
+
+    let request_url = match collateral_update_type {
+        Some(update) => append_query_parameter(base_url, "update", update)?,
+        None => base_url.to_string(),
+    };
+    fetch_intel_pcs_body(&request_url).await
+}
+
 fn crl_is_current(crl: &X509Crl) -> bool {
     let now = match Asn1Time::days_from_now(0) {
         Ok(now) => now,
@@ -2260,133 +2368,121 @@ pub async fn upsert_enclave_identity_func(
     enclave_identity_dao_contract_addr: &str,
 ) -> bool {
     let log_prefix = format!("[{}][{}]", chain_id, enclave_identity_dao_contract_addr);
-    let mut req_url = format!(
+    let base_url = format!(
         "https://api.trustedservices.intel.com/{}/certification/{}/qe/identity",
         platform, version
     );
-    if tcb_evaluation_data_number.is_some() && tcb_evaluation_data_number.unwrap() > 0 {
-        req_url.push_str(&format!(
-            "?tcbEvaluationDataNumber={}",
-            tcb_evaluation_data_number.unwrap()
-        ));
-    } else if collateral_update_type.is_some() {
-        req_url.push_str(&format!("?update={}", collateral_update_type.unwrap()));
-    }
-    let response = match reqwest::get(req_url.clone()).await {
-        Ok(v) => v,
-        Err(e) => {
-            log::error!("Unable to get {}, error = {:?}", req_url, e);
+    let qe_identity_str = match fetch_intel_collateral_with_eval_fallback(
+        &base_url,
+        collateral_update_type,
+        tcb_evaluation_data_number,
+        "enclaveIdentity",
+        &log_prefix,
+    )
+    .await
+    {
+        Ok(body) => body,
+        Err(err) => {
+            log::error!("{} failed to fetch QE identity: {}", log_prefix, err);
             return false;
         }
     };
-    if response.status().is_success() {
-        let qe_identity_str = match response.text().await {
-            Ok(v) => v,
-            Err(e) => {
-                log::error!("Unable to get the content of {}, error = {:?}", req_url, e);
-                return false;
-            }
-        };
-        log::info!("QE-Identity: {}", qe_identity_str);
+    log::info!("QE-Identity: {}", qe_identity_str);
 
-        let provider = Provider::<Http>::try_from(rpc_url).unwrap();
-        let wallet = private_key.parse::<LocalWallet>().unwrap();
-        let signer = Arc::new(SignerMiddleware::new(
-            provider,
-            wallet.with_chain_id(chain_id),
-        ));
+    let provider = Provider::<Http>::try_from(rpc_url).unwrap();
+    let wallet = private_key.parse::<LocalWallet>().unwrap();
+    let signer = Arc::new(SignerMiddleware::new(
+        provider,
+        wallet.with_chain_id(chain_id),
+    ));
 
-        let enclave_identity_dao = EnclaveIdentityDao::new(
-            parse_address_from_str(enclave_identity_dao_contract_addr),
-            signer.clone(),
-        );
-        let enclave_id = if platform == "tdx" {
-            EnclaveID::TD_QE
-        } else if platform == "sgx" {
-            EnclaveID::QE
-        } else {
-            log::error!("Invalid platform: {}", platform);
-            return false;
-        };
-        let id = U256::from(enclave_id as u32);
-        let version = if version == "v3" {
-            U256::from(3u32)
-        } else if version == "v4" {
-            U256::from(4u32)
-        } else if version == "v5" {
-            U256::from(5u32)
-        } else {
-            log::error!("Invalid version: {}", version);
-            return false;
-        };
-        let enclave_identity_str = qe_identity_str.as_str();
-        let enclave_identity: EnclaveIdentity = serde_json::from_str(enclave_identity_str).unwrap();
-        let enclave_identity_str = &enclave_identity_str[r#""enclaveIdentity":{"#.len()..];
-        let end_idx = enclave_identity_str.find(r#","signature""#).unwrap();
-        let enclave_identity_str = &enclave_identity_str[..end_idx];
-        let enclave_identity_obj = EnclaveIdentityJsonObj {
-            identity_str: enclave_identity_str.to_string(),
-            signature: Bytes::from_hex(&enclave_identity.signature).unwrap(),
-        };
-        log::info!("identity_str = {}", enclave_identity_obj.identity_str);
-        log::info!("signature = {}", enclave_identity_obj.signature);
-        let call = enclave_identity_dao
-            .upsert_enclave_identity(id, version, enclave_identity_obj)
-            .gas_price(gas_price);
-        let gas_with_buf = match estimate_gas_at_latest(
-            signer.as_ref(),
-            &call.tx,
-            &log_prefix,
-            "upsert_enclave_identity",
-        )
-        .await
-        {
-            Some(g) => g,
-            None => return false,
-        };
-        match call.gas(gas_with_buf).send().await {
-            Ok(pending_tx) => {
-                log::info!(
-                    "{} txn[upsert_enclave_identity] hash: {:?}",
-                    log_prefix,
-                    pending_tx.tx_hash()
-                );
-                match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
-                    Ok(Ok(receipt)) => {
-                        log::info!(
-                            "{} txn[upsert_enclave_identity] receipt: {:?}",
-                            log_prefix,
-                            receipt
-                        );
-                        return true;
-                    }
-                    Ok(Err(err)) => {
-                        log::error!(
-                            "{} txn[upsert_enclave_identity] receipt meet error: {:?}",
-                            log_prefix,
-                            err
-                        );
-                        return false;
-                    }
-                    Err(_) => {
-                        log::error!("{} txn[upsert_enclave_identity] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
-                        return false;
-                    }
-                }
-            }
-            Err(err) => {
-                log::error!(
-                    "{} txn[upsert_enclave_identity] meet error: {:?}",
-                    log_prefix,
-                    err
-                );
-                return false;
-            }
-        }
+    let enclave_identity_dao = EnclaveIdentityDao::new(
+        parse_address_from_str(enclave_identity_dao_contract_addr),
+        signer.clone(),
+    );
+    let enclave_id = if platform == "tdx" {
+        EnclaveID::TD_QE
+    } else if platform == "sgx" {
+        EnclaveID::QE
     } else {
-        log::error!("[ERROR] {} returns {:?}, exit", req_url, response.status());
+        log::error!("Invalid platform: {}", platform);
         return false;
     };
+    let id = U256::from(enclave_id as u32);
+    let version = if version == "v3" {
+        U256::from(3u32)
+    } else if version == "v4" {
+        U256::from(4u32)
+    } else if version == "v5" {
+        U256::from(5u32)
+    } else {
+        log::error!("Invalid version: {}", version);
+        return false;
+    };
+    let enclave_identity_str = qe_identity_str.as_str();
+    let enclave_identity: EnclaveIdentity = serde_json::from_str(enclave_identity_str).unwrap();
+    let enclave_identity_str = &enclave_identity_str[r#""enclaveIdentity":{"#.len()..];
+    let end_idx = enclave_identity_str.find(r#","signature""#).unwrap();
+    let enclave_identity_str = &enclave_identity_str[..end_idx];
+    let enclave_identity_obj = EnclaveIdentityJsonObj {
+        identity_str: enclave_identity_str.to_string(),
+        signature: Bytes::from_hex(&enclave_identity.signature).unwrap(),
+    };
+    log::info!("identity_str = {}", enclave_identity_obj.identity_str);
+    log::info!("signature = {}", enclave_identity_obj.signature);
+    let call = enclave_identity_dao
+        .upsert_enclave_identity(id, version, enclave_identity_obj)
+        .gas_price(gas_price);
+    let gas_with_buf = match estimate_gas_at_latest(
+        signer.as_ref(),
+        &call.tx,
+        &log_prefix,
+        "upsert_enclave_identity",
+    )
+    .await
+    {
+        Some(g) => g,
+        None => return false,
+    };
+    match call.gas(gas_with_buf).send().await {
+        Ok(pending_tx) => {
+            log::info!(
+                "{} txn[upsert_enclave_identity] hash: {:?}",
+                log_prefix,
+                pending_tx.tx_hash()
+            );
+            match timeout(TX_CONFIRMATION_TIMEOUT, pending_tx).await {
+                Ok(Ok(receipt)) => {
+                    log::info!(
+                        "{} txn[upsert_enclave_identity] receipt: {:?}",
+                        log_prefix,
+                        receipt
+                    );
+                    return true;
+                }
+                Ok(Err(err)) => {
+                    log::error!(
+                        "{} txn[upsert_enclave_identity] receipt meet error: {:?}",
+                        log_prefix,
+                        err
+                    );
+                    return false;
+                }
+                Err(_) => {
+                    log::error!("{} txn[upsert_enclave_identity] timeout waiting for confirmation after {:?}", log_prefix, TX_CONFIRMATION_TIMEOUT);
+                    return false;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "{} txn[upsert_enclave_identity] meet error: {:?}",
+                log_prefix,
+                err
+            );
+            return false;
+        }
+    }
 }
 
 async fn upsert_platform_processor_ca_crl(
@@ -2539,6 +2635,134 @@ async fn upsert_platform_processor_ca_crl(
         eager_crl_index_is_ready(&pcs_dao, &crl_for_readiness, &log_prefix).await
     } else {
         true
+    }
+}
+
+#[cfg(test)]
+mod intel_eval_fallback_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    fn spawn_http_server(
+        responses: Vec<(u16, String)>,
+    ) -> (String, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured_requests = Arc::clone(&requests);
+        let handle = thread::spawn(move || {
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut raw_request = Vec::new();
+                let mut buffer = [0u8; 1024];
+                loop {
+                    let count = stream.read(&mut buffer).unwrap();
+                    if count == 0 {
+                        break;
+                    }
+                    raw_request.extend_from_slice(&buffer[..count]);
+                    if raw_request.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                captured_requests
+                    .lock()
+                    .unwrap()
+                    .push(String::from_utf8(raw_request).unwrap());
+
+                let reason = if status == 200 { "OK" } else { "Not Found" };
+                let response = format!(
+                    "HTTP/1.1 {} {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    status,
+                    reason,
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        (
+            format!("http://{}/tcb?fmspc=test", address),
+            requests,
+            handle,
+        )
+    }
+
+    fn tcb_payload(eval_number: u32) -> String {
+        format!(
+            r#"{{"tcbInfo":{{"tcbEvaluationDataNumber":{}}},"signature":"aa"}}"#,
+            eval_number
+        )
+    }
+
+    #[tokio::test]
+    async fn exact_eval_request_is_preferred() {
+        let expected_body = tcb_payload(19);
+        let (base_url, requests, server) = spawn_http_server(vec![(200, expected_body.clone())]);
+
+        let body = fetch_intel_collateral_with_eval_fallback(
+            &base_url,
+            Some("standard"),
+            Some(19),
+            "tcbInfo",
+            "[test]",
+        )
+        .await
+        .unwrap();
+        server.join().unwrap();
+
+        assert_eq!(body, expected_body);
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].contains("tcbEvaluationDataNumber=19"));
+    }
+
+    #[tokio::test]
+    async fn matching_standard_response_is_used_after_exact_404() {
+        let expected_body = tcb_payload(19);
+        let (base_url, requests, server) =
+            spawn_http_server(vec![(404, String::new()), (200, expected_body.clone())]);
+
+        let body = fetch_intel_collateral_with_eval_fallback(
+            &base_url,
+            Some("standard"),
+            Some(19),
+            "tcbInfo",
+            "[test]",
+        )
+        .await
+        .unwrap();
+        server.join().unwrap();
+
+        assert_eq!(body, expected_body);
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0].contains("tcbEvaluationDataNumber=19"));
+        assert!(requests[1].starts_with("GET /tcb?fmspc=test HTTP/1.1"));
+        assert!(!requests[1].contains("tcbEvaluationDataNumber"));
+        assert!(!requests[1].contains("update="));
+    }
+
+    #[tokio::test]
+    async fn mismatched_standard_response_is_rejected_after_exact_404() {
+        let (base_url, _, server) =
+            spawn_http_server(vec![(404, String::new()), (200, tcb_payload(19))]);
+
+        let error = fetch_intel_collateral_with_eval_fallback(
+            &base_url,
+            Some("standard"),
+            Some(20),
+            "tcbInfo",
+            "[test]",
+        )
+        .await
+        .unwrap_err();
+        server.join().unwrap();
+
+        assert!(error.contains("expected 20, got 19"));
     }
 }
 

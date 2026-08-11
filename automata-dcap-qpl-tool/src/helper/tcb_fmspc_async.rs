@@ -6,7 +6,7 @@
 //! rebuilt raw against Intel's signature, so the chain no longer needs a JSON parser
 //! or a second raw-vs-parsed consistency pass.
 
-use crate::helper::estimate_gas_at_latest;
+use crate::helper::{estimate_gas_at_latest, fetch_intel_collateral_with_eval_fallback};
 use crate::pccs_types::TcbInfo;
 use automata_dcap_qpl_contracts::{
     fmspc_tcb_dao::TcbInfoJsonObj, parse_address_from_env_var::parse_address_from_str,
@@ -400,26 +400,18 @@ async fn fetch_payload(
     collateral_update_type: Option<&str>,
     tcb_evaluation_data_number: Option<u32>,
 ) -> Result<(String, TcbInfoJsonObj, TcbLocator), String> {
-    let mut req_url = format!(
+    let base_url = format!(
         "https://api.trustedservices.intel.com/{}/certification/{}/tcb?fmspc={}",
         platform, version, fmspc
     );
-    if let Some(n) = tcb_evaluation_data_number.filter(|v| *v > 0) {
-        req_url.push_str(&format!("&tcbEvaluationDataNumber={}", n));
-    } else if let Some(u) = collateral_update_type {
-        req_url.push_str(&format!("&update={}", u));
-    }
-    log::debug!("{} req_url: {}", log_prefix, req_url);
-    let response = reqwest::get(req_url.clone())
-        .await
-        .map_err(|err| format!("unable to get {}: {:?}", req_url, err))?;
-    if !response.status().is_success() {
-        return Err(format!("{} returned {}", req_url, response.status()));
-    }
-    let body = response
-        .text()
-        .await
-        .map_err(|err| format!("unable to read body of {}: {:?}", req_url, err))?;
+    let body = fetch_intel_collateral_with_eval_fallback(
+        &base_url,
+        collateral_update_type,
+        tcb_evaluation_data_number,
+        "tcbInfo",
+        log_prefix,
+    )
+    .await?;
     parse_payload(&body, platform, version)
 }
 
